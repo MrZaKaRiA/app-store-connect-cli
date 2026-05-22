@@ -146,16 +146,44 @@ Examples:
 			})
 			allTerritories = append(allTerritories, equalizations...)
 
+			priceAttrs := asc.SubscriptionPriceCreateAttributes{
+				StartDate: explicitStartDate,
+			}
+			if *preserved {
+				priceAttrs.Preserved = preserved
+			}
+
+			subscriptionState := ""
+			autoScheduled := false
+
 			if *dryRun {
+				if priceAttrs.StartDate == "" && *autoStartDate {
+					existingCtx, existingCancel := shared.ContextWithTimeout(ctx)
+					existingPrices, err := client.GetSubscriptionPricesRelationships(existingCtx, subID)
+					existingCancel()
+					if err != nil {
+						return fmt.Errorf("equalize: failed to check existing prices: %w", err)
+					}
+					if len(existingPrices.Data) > 0 {
+						var scheduleErr error
+						priceAttrs.StartDate, subscriptionState, autoScheduled, _, scheduleErr = autoScheduleEqualizeStartDate(ctx, client, subID)
+						if scheduleErr != nil {
+							return fmt.Errorf("equalize: %w", scheduleErr)
+						}
+					}
+				}
+
 				return printEqualizeResult(&equalizeResult{
-					SubscriptionID: subID,
-					BaseTerritory:  territory,
-					BasePrice:      price,
-					StartDate:      explicitStartDate,
-					Preserved:      *preserved,
-					DryRun:         true,
-					Territories:    allTerritories,
-					Total:          len(allTerritories),
+					SubscriptionID:    subID,
+					BaseTerritory:     territory,
+					BasePrice:         price,
+					StartDate:         priceAttrs.StartDate,
+					AutoScheduled:     autoScheduled,
+					Preserved:         *preserved,
+					SubscriptionState: subscriptionState,
+					DryRun:            true,
+					Territories:       allTerritories,
+					Total:             len(allTerritories),
 				}, *output.Output, *output.Pretty)
 			}
 
@@ -171,15 +199,6 @@ Examples:
 				return fmt.Errorf("equalize: failed to check existing prices: %w", err)
 			}
 
-			priceAttrs := asc.SubscriptionPriceCreateAttributes{
-				StartDate: explicitStartDate,
-			}
-			if *preserved {
-				priceAttrs.Preserved = preserved
-			}
-
-			subscriptionState := ""
-			autoScheduled := false
 			if priceAttrs.StartDate == "" && *autoStartDate && len(existingPrices.Data) > 0 {
 				var scheduleErr error
 				priceAttrs.StartDate, subscriptionState, autoScheduled, effectiveAt, scheduleErr = autoScheduleEqualizeStartDate(ctx, client, subID)
