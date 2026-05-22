@@ -53,7 +53,18 @@ brew install asc
 curl -fsSL https://asccli.sh/install | bash
 ```
 
-Windows users can download the signed release binaries directly from the
+```powershell
+# Windows (WinGet, once the package is accepted)
+winget install asc
+
+# Exact fallback when scripting
+winget install --id Rorkai.ASC --exact
+```
+
+The WinGet package is tracked in
+[GitHub Discussion #1552](https://github.com/rorkai/App-Store-Connect-CLI/discussions/1552).
+Until it appears in `winget search asc`, Windows users can download the signed
+release binaries directly from the
 [GitHub releases page](https://github.com/rorkai/App-Store-Connect-CLI/releases/latest).
 
 For source builds and contributor setup, see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -133,6 +144,13 @@ depending on a command in CI or scripts:
 - Check which binary you are running: `which asc`
 - Confirm the installed version: `asc version`
 - If Homebrew is behind the latest GitHub release, use the install script from `https://asccli.sh/install`
+
+### WinGet
+
+- Refresh WinGet sources first: `winget source update`
+- Prefer the short install once available: `winget install asc`
+- If the short name ever becomes ambiguous, use the package identifier: `winget install --id Rorkai.ASC --exact`
+- Confirm the installed command resolves: `Get-Command asc` and `asc version`
 
 ### Authentication
 

@@ -1,0 +1,43 @@
+name: WinGet smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_id:
+        description: WinGet package identifier
+        required: true
+        default: Rorkai.ASC
+      command:
+        description: Command and moniker to verify
+        required: true
+        default: asc
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Verify WinGet source
+        shell: pwsh
+        run: |
+          winget --version
+          winget source update
+
+      - name: Verify package discovery
+        shell: pwsh
+        run: |
+          winget search '${{ inputs.command }}' --source winget
+          winget show --id '${{ inputs.package_id }}' --exact --source winget
+
+      - name: Install by short command
+        shell: pwsh
+        run: |
+          winget install '${{ inputs.command }}' --source winget --accept-source-agreements --accept-package-agreements
+          $resolved = Get-Command '${{ inputs.command }}' -ErrorAction Stop
+          & $resolved.Source --help
+          & $resolved.Source version
+
+      - name: Uninstall package
+        if: always()
+        shell: pwsh
+        run: |
+          winget uninstall --id '${{ inputs.package_id }}' --exact --source winget --accept-source-agreements
