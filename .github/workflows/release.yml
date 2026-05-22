@@ -230,11 +230,12 @@ jobs:
           git config user.email "release-bot@rork.com"
           git add "manifests/r/Rorkai/ASC/${VERSION}"
           if git diff --cached --quiet; then
-            echo "WinGet manifests for ${VERSION} are already up to date."
-          else
-            git commit -m "New package: Rorkai.ASC version ${VERSION}"
-            git push --force-with-lease origin "${BRANCH}"
+            echo "WinGet manifests for ${VERSION} are already published or up to date."
+            exit 0
           fi
+
+          git commit -m "New package: Rorkai.ASC version ${VERSION}"
+          git push --force-with-lease origin "${BRANCH}"
 
           if gh pr list --repo microsoft/winget-pkgs --head "${WINGET_FORK_OWNER}:${BRANCH}" --json number --jq '.[0].number // empty' | grep -q .; then
             echo "WinGet PR already exists for ${VERSION}."
