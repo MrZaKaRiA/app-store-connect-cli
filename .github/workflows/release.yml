@@ -246,7 +246,9 @@ jobs:
           git commit -m "${PR_KIND}: Rorkai.ASC version ${VERSION}"
           git push --force-with-lease origin "${BRANCH}"
 
-          if gh pr list --repo microsoft/winget-pkgs --head "${WINGET_FORK_OWNER}:${BRANCH}" --json number --jq '.[0].number // empty' | grep -q .; then
+          if gh pr list --repo microsoft/winget-pkgs --state open --search "Rorkai.ASC version ${VERSION} in:title" --json number --jq '.[0].number // empty' | grep -q .; then
+            echo "WinGet PR already exists for Rorkai.ASC ${VERSION}."
+          elif gh pr list --repo microsoft/winget-pkgs --head "${WINGET_FORK_OWNER}:${BRANCH}" --json number --jq '.[0].number // empty' | grep -q .; then
             echo "WinGet PR already exists for ${VERSION}."
           else
             gh pr create \
