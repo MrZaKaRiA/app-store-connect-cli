@@ -220,8 +220,13 @@ jobs:
           cd winget-pkgs
           git remote add upstream https://github.com/microsoft/winget-pkgs.git
           git fetch upstream master --depth 1
-          git sparse-checkout set "manifests/r/Rorkai/ASC/${VERSION}"
+          git sparse-checkout set "manifests/r/Rorkai/ASC"
           git checkout -B "${BRANCH}" upstream/master
+
+          PR_KIND="New package"
+          if [ -d manifests/r/Rorkai/ASC ] && find manifests/r/Rorkai/ASC -mindepth 1 -maxdepth 1 -type d ! -name "${VERSION}" | grep -q .; then
+            PR_KIND="New version"
+          fi
 
           mkdir -p "manifests/r/Rorkai/ASC/${VERSION}"
           cp "${MANIFEST_SOURCE}"/* "manifests/r/Rorkai/ASC/${VERSION}/"
@@ -234,7 +239,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "New package: Rorkai.ASC version ${VERSION}"
+          git commit -m "${PR_KIND}: Rorkai.ASC version ${VERSION}"
           git push --force-with-lease origin "${BRANCH}"
 
           if gh pr list --repo microsoft/winget-pkgs --head "${WINGET_FORK_OWNER}:${BRANCH}" --json number --jq '.[0].number // empty' | grep -q .; then
@@ -244,6 +249,6 @@ jobs:
               --repo microsoft/winget-pkgs \
               --base master \
               --head "${WINGET_FORK_OWNER}:${BRANCH}" \
-              --title "New package: Rorkai.ASC version ${VERSION}" \
+              --title "${PR_KIND}: Rorkai.ASC version ${VERSION}" \
               --body "Adds Rorkai.ASC ${VERSION} from https://github.com/rorkai/App-Store-Connect-CLI/releases/tag/${VERSION}."
           fi
