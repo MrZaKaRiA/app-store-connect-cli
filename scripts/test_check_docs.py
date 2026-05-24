@@ -69,17 +69,17 @@ class WinGetManifestGenerationTest(unittest.TestCase):
             release = root / "release"
             output = root / "winget"
             release.mkdir()
-            (release / "asc_1.5.0_checksums.txt").write_text(
+            (release / "asc_1.5.1_checksums.txt").write_text(
                 "\n".join(
                     [
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  asc_1.5.0_linux_amd64",
-                        "130264eabdbba35073460eb33f342f9f4b6d93bfc9b173624a29efa1072bdb00  asc_1.5.0_windows_amd64.exe",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  asc_1.5.1_linux_amd64",
+                        "130264eabdbba35073460eb33f342f9f4b6d93bfc9b173624a29efa1072bdb00  asc_1.5.1_windows_amd64.exe",
                     ]
                 ),
                 encoding="utf-8",
             )
 
-            files = generate_winget_manifests.generate("1.5.0", release, output)
+            files = generate_winget_manifests.generate("1.5.1", release, output)
 
             self.assertEqual(len(files), 3)
             installer = (
@@ -88,13 +88,13 @@ class WinGetManifestGenerationTest(unittest.TestCase):
                 / "r"
                 / "Rorkai"
                 / "ASC"
-                / "1.5.0"
+                / "1.5.1"
                 / "Rorkai.ASC.installer.yaml"
             ).read_text(encoding="utf-8")
             self.assertIn("InstallerType: portable", installer)
             self.assertIn("Commands:\n  - asc", installer)
             self.assertIn(
-                "InstallerUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/download/1.5.0/asc_1.5.0_windows_amd64.exe",
+                "InstallerUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/download/1.5.1/asc_1.5.1_windows_amd64.exe",
                 installer,
             )
             self.assertIn(
@@ -108,12 +108,12 @@ class WinGetManifestGenerationTest(unittest.TestCase):
             release = root / "release"
             output = root / "winget"
             release.mkdir()
-            (release / "asc_1.5.0_checksums.txt").write_text(
-                "130264eabdbba35073460eb33f342f9f4b6d93bfc9b173624a29efa1072bdb00 *asc_1.5.0_windows_amd64.exe\n",
+            (release / "asc_1.5.1_checksums.txt").write_text(
+                "130264eabdbba35073460eb33f342f9f4b6d93bfc9b173624a29efa1072bdb00 *asc_1.5.1_windows_amd64.exe\n",
                 encoding="utf-8",
             )
 
-            generate_winget_manifests.generate("1.5.0", release, output)
+            generate_winget_manifests.generate("1.5.1", release, output)
 
             installer = (
                 output
@@ -121,7 +121,7 @@ class WinGetManifestGenerationTest(unittest.TestCase):
                 / "r"
                 / "Rorkai"
                 / "ASC"
-                / "1.5.0"
+                / "1.5.1"
                 / "Rorkai.ASC.installer.yaml"
             ).read_text(encoding="utf-8")
             self.assertIn(

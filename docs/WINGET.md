@@ -40,7 +40,7 @@ from the Windows release asset:
 
 ```yaml
 PackageIdentifier: Rorkai.ASC
-PackageVersion: 1.5.0
+PackageVersion: 1.5.1
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
@@ -48,7 +48,7 @@ ManifestVersion: 1.6.0
 
 ```yaml
 PackageIdentifier: Rorkai.ASC
-PackageVersion: 1.5.0
+PackageVersion: 1.5.1
 PackageLocale: en-US
 Publisher: Rorkai
 PackageName: asc
@@ -63,20 +63,20 @@ Tags:
   - cli
   - ios
   - testflight
-ReleaseNotesUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/tag/1.5.0
+ReleaseNotesUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/tag/1.5.1
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 ```
 
 ```yaml
 PackageIdentifier: Rorkai.ASC
-PackageVersion: 1.5.0
+PackageVersion: 1.5.1
 InstallerType: portable
 Commands:
   - asc
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/download/1.5.0/asc_1.5.0_windows_amd64.exe
+    InstallerUrl: https://github.com/rorkai/App-Store-Connect-CLI/releases/download/1.5.1/asc_1.5.1_windows_amd64.exe
     InstallerSha256: REPLACE_WITH_RELEASE_SHA256
 ManifestType: installer
 ManifestVersion: 1.6.0
@@ -116,7 +116,7 @@ To generate manifests locally for a release asset directory:
 
 ```bash
 python3 scripts/generate_winget_manifests.py \
-  --version 1.5.0 \
+  --version 1.5.1 \
   --release-dir release \
   --output-dir /tmp/asc-winget
 ```
