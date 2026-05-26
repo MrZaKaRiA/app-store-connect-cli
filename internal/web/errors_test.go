@@ -88,7 +88,20 @@ func TestIsAlreadyExistsConflict(t *testing.T) {
 				Status:  http.StatusConflict,
 				rawBody: []byte(`{"errors":[{"detail":"This in-app purchase is already attached to the app version."}]}`),
 			},
-			want: true,
+			want: false,
+		},
+		{
+			name: "already exists for another target",
+			err: &APIError{
+				Status: http.StatusConflict,
+				rawBody: []byte(`{
+						"errors":[{
+							"code":"ENTITY_ERROR.ATTRIBUTE.INVALID.ALREADY_EXISTS",
+							"detail":"This in-app purchase is already attached to another submission."
+						}]
+					}`),
+			},
+			want: false,
 		},
 		{
 			name: "other conflict",

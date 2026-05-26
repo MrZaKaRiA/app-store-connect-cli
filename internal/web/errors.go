@@ -42,7 +42,8 @@ func IsDuplicateAppNameError(err error) bool {
 }
 
 // IsAlreadyExistsConflict reports whether an internal API error is a 409 caused
-// by trying to create a resource that already exists.
+// by an exact already-exists response. It intentionally avoids treating broader
+// "already attached/submitted" wording as idempotent success.
 func IsAlreadyExistsConflict(err error) bool {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr == nil || apiErr.Status != http.StatusConflict {
@@ -58,7 +59,7 @@ func IsAlreadyExistsConflict(err error) bool {
 	}
 	if json.Unmarshal(apiErr.rawResponseBody(), &payload) != nil {
 		body := strings.ToLower(string(apiErr.rawResponseBody()))
-		return strings.Contains(body, "already") && (strings.Contains(body, "exist") || strings.Contains(body, "attached") || strings.Contains(body, "submitted"))
+		return strings.Contains(body, "already exists") && !conflictTextMentionsDifferentTarget(body)
 	}
 
 	for _, e := range payload.Errors {
@@ -66,9 +67,13 @@ func IsAlreadyExistsConflict(err error) bool {
 		detail := strings.ToLower(strings.TrimSpace(e.Detail))
 		title := strings.ToLower(strings.TrimSpace(e.Title))
 		text := detail + " " + title
-		if strings.Contains(code, "ALREADY") || (strings.Contains(text, "already") && (strings.Contains(text, "exist") || strings.Contains(text, "attached") || strings.Contains(text, "submitted"))) {
+		if strings.Contains(code, "ALREADY_EXISTS") && !conflictTextMentionsDifferentTarget(text) {
 			return true
 		}
 	}
 	return false
+}
+
+func conflictTextMentionsDifferentTarget(text string) bool {
+	return strings.Contains(text, "another") || strings.Contains(text, "different")
 }

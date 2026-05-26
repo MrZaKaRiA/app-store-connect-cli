@@ -306,6 +306,11 @@ func TestWebReviewIAPsAttachInvalidValueExitCodes(t *testing.T) {
 			wantStderr: `invalid boolean value "maybe" for -confirm`,
 		},
 		{
+			name:       "blank iap selector",
+			args:       []string{"web", "review", "iaps", "attach", "--app", "123456789", "--iap-id", "   ", "--confirm"},
+			wantStderr: "--iap-id is required",
+		},
+		{
 			name:       "subcommand flag before attach rejected",
 			args:       []string{"web", "review", "iaps", "--app", "123456789", "attach", "--iap-id", "9000000001", "--confirm"},
 			wantStderr: "flag provided but not defined: -app",
