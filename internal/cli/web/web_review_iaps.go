@@ -160,6 +160,12 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 			if err != nil {
 				return fmt.Errorf("web review iaps attach: %w", err)
 			}
+			// The iris attach POST takes the iris resource id, not the
+			// caller's selector — `--iap-id` may have been a bundle-style
+			// productId that matched via `attributes.productId`, in which
+			// case posting the selector as the relationship id would be
+			// wrong. Always use the resolved iris UUID.
+			resolvedIrisID := reviewIAP.ID
 			if reviewIAP.SubmitWithNextAppStoreVersion {
 				payload := reviewIAPMutationOutput{
 					AppID:     trimmedAppID,
@@ -167,7 +173,7 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 					Operation: "attach",
 					Changed:   false,
 					Submission: webcore.ReviewIAPSubmission{
-						InAppPurchaseID:               trimmedIAPID,
+						InAppPurchaseID:               resolvedIrisID,
 						SubmitWithNextAppStoreVersion: true,
 					},
 				}
@@ -181,7 +187,7 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 			}
 
 			submission, err := withWebSpinnerValue("Attaching IAP to next app version", func() (webcore.ReviewIAPSubmission, error) {
-				return client.CreateInAppPurchaseSubmission(requestCtx, trimmedIAPID)
+				return client.CreateInAppPurchaseSubmission(requestCtx, resolvedIrisID)
 			})
 			if err != nil {
 				return withWebAuthHint(

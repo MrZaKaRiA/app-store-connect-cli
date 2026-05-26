@@ -94,6 +94,113 @@ func TestWebReviewIAPsAttachRejectsNonNumericAppID(t *testing.T) {
 	}
 }
 
+// TestWebReviewIAPsAttachPostsIrisResourceIDWhenSelectorWasProductID guards
+// the subtle correctness property requested in PR review: when --iap-id is a
+// bundle-style productId (matched against attributes.productId), the
+// /iris/v1/inAppPurchaseSubmissions POST must still carry the iris resource
+// id in the relationship, not the productId selector.
+func TestWebReviewIAPsAttachPostsIrisResourceIDWhenSelectorWasProductID(t *testing.T) {
+	_ = stubWebProgressLabels(t)
+
+	origResolveSession := resolveSessionFn
+	t.Cleanup(func() {
+		resolveSessionFn = origResolveSession
+	})
+
+	const (
+		irisResourceID = "ae6d89d7-15c5-4a3d-9041-663a4d40638e"
+		productID      = "com.example.lifetime"
+	)
+
+	resolveSessionFn = func(ctx context.Context, appleID, password, twoFactorCode string) (*webcore.AuthSession, string, error) {
+		return &webcore.AuthSession{
+			Client: &http.Client{
+				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					switch {
+					case req.Method == http.MethodGet && req.URL.Path == "/iris/v1/apps/123456789/inAppPurchases":
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Header:     http.Header{"Content-Type": []string{"application/json"}},
+							Body: io.NopCloser(strings.NewReader(`{
+								"data": [{
+									"type": "inAppPurchases",
+									"id": "` + irisResourceID + `",
+									"attributes": {
+										"productId": "` + productID + `",
+										"referenceName": "Lifetime",
+										"state": "READY_TO_SUBMIT"
+									}
+								}]
+							}`)),
+							Request: req,
+						}, nil
+					case req.Method == http.MethodPost && req.URL.Path == "/iris/v1/inAppPurchaseSubmissions":
+						body, err := io.ReadAll(req.Body)
+						if err != nil {
+							t.Fatalf("read POST body: %v", err)
+						}
+						if !strings.Contains(string(body), `"id":"`+irisResourceID+`"`) {
+							t.Fatalf("expected attach POST to carry iris resource id %q, got %s", irisResourceID, body)
+						}
+						if strings.Contains(string(body), `"id":"`+productID+`"`) {
+							t.Fatalf("attach POST must not carry productId as relationship id; body=%s", body)
+						}
+						return &http.Response{
+							StatusCode: http.StatusCreated,
+							Header:     http.Header{"Content-Type": []string{"application/json"}},
+							Body: io.NopCloser(strings.NewReader(`{
+								"data": {
+									"type": "inAppPurchaseSubmissions",
+									"id": "submission-1",
+									"attributes": {"submitWithNextAppStoreVersion": true},
+									"relationships": {
+										"inAppPurchaseV2": {
+											"data": {"type": "inAppPurchases", "id": "` + irisResourceID + `"}
+										}
+									}
+								}
+							}`)),
+							Request: req,
+						}, nil
+					default:
+						t.Fatalf("unexpected request: %s %s", req.Method, req.URL.Path)
+						return nil, nil
+					}
+				}),
+			},
+		}, "cache", nil
+	}
+
+	cmd := WebReviewIAPsAttachCommand()
+	if err := cmd.FlagSet.Parse([]string{
+		"--app", "123456789",
+		"--iap-id", productID,
+		"--confirm",
+		"--output", "json",
+	}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	stdout, _ := captureOutput(t, func() {
+		if err := cmd.Exec(context.Background(), nil); err != nil {
+			t.Fatalf("exec error: %v", err)
+		}
+	})
+
+	var payload reviewIAPMutationOutput
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("failed to parse stdout JSON: %v\nstdout=%s", err, stdout)
+	}
+	// IAPID in the output preserves what the caller passed (the selector).
+	if payload.IAPID != productID {
+		t.Fatalf("expected IAPID to echo caller selector %q, got %q", productID, payload.IAPID)
+	}
+	// Submission.InAppPurchaseID is the iris-resolved id (from the POST response relationship).
+	if payload.Submission.InAppPurchaseID != irisResourceID {
+		t.Fatalf("expected Submission.InAppPurchaseID = %q, got %q", irisResourceID, payload.Submission.InAppPurchaseID)
+	}
+}
+
 func TestWebReviewIAPsAttachVerifiesIAPBelongsToAppBeforeMutating(t *testing.T) {
 	_ = stubWebProgressLabels(t)
 
