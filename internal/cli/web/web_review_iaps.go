@@ -129,14 +129,14 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("web review iaps attach", flag.ExitOnError)
 
 	appID := fs.String("app", "", "App ID")
-	iapID := fs.String("iap-id", "", "Non-renewing IAP ID")
+	iapID := fs.String("iap-id", "", "Iris IAP UUID or product ID")
 	confirm := fs.Bool("confirm", false, "Confirm the attach operation")
 	authFlags := bindWebSessionFlags(fs)
 	output := shared.BindOutputFlags(fs)
 
 	return &ffcli.Command{
 		Name:       "attach",
-		ShortUsage: "asc web review iaps attach --app APP_ID --iap-id IAP_ID --confirm [flags]",
+		ShortUsage: "asc web review iaps attach --app APP_ID --iap-id IAP_ID_OR_PRODUCT_ID --confirm [flags]",
 		ShortHelp:  "[experimental] Attach a non-renewing IAP to the next app version review.",
 		FlagSet:    fs,
 		UsageFunc:  shared.DefaultUsageFunc,
@@ -190,6 +190,25 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 				return client.CreateInAppPurchaseSubmission(requestCtx, resolvedIrisID)
 			})
 			if err != nil {
+				if webcore.IsAlreadyExistsConflict(err) {
+					payload := reviewIAPMutationOutput{
+						AppID:     trimmedAppID,
+						IAPID:     trimmedIAPID,
+						Operation: "attach",
+						Changed:   false,
+						Submission: webcore.ReviewIAPSubmission{
+							InAppPurchaseID:               resolvedIrisID,
+							SubmitWithNextAppStoreVersion: true,
+						},
+					}
+					return shared.PrintOutputWithRenderers(
+						payload,
+						*output.Output,
+						*output.Pretty,
+						func() error { return renderReviewIAPMutationTable(payload) },
+						func() error { return renderReviewIAPMutationMarkdown(payload) },
+					)
+				}
 				return withWebAuthHint(
 					fmt.Errorf("web review iaps attach for app %q, iap %q: %w", trimmedAppID, trimmedIAPID, err),
 					"web review iaps attach",
