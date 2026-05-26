@@ -5,8 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
+
+const reviewIAPFields = "productId,name,state,inAppPurchaseType,isAppStoreReviewInProgress,submitWithNextAppStoreVersion"
+
+// ReviewIAP summarizes a non-subscription IAP's attach state for the next app
+// version review.
+type ReviewIAP struct {
+	ID                            string `json:"id"`
+	ProductID                     string `json:"productId,omitempty"`
+	Name                          string `json:"name,omitempty"`
+	State                         string `json:"state,omitempty"`
+	InAppPurchaseType             string `json:"inAppPurchaseType,omitempty"`
+	IsAppStoreReviewInProgress    bool   `json:"isAppStoreReviewInProgress"`
+	SubmitWithNextAppStoreVersion bool   `json:"submitWithNextAppStoreVersion"`
+}
 
 // ReviewIAPSubmission captures the hidden submission resource returned by the
 // web flow that attaches a non-renewing in-app purchase to the next app version
@@ -15,6 +30,74 @@ type ReviewIAPSubmission struct {
 	ID                            string `json:"id"`
 	InAppPurchaseID               string `json:"inAppPurchaseId,omitempty"`
 	SubmitWithNextAppStoreVersion bool   `json:"submitWithNextAppStoreVersion"`
+}
+
+func decodeReviewIAP(resource jsonAPIResource) ReviewIAP {
+	return ReviewIAP{
+		ID:                            strings.TrimSpace(resource.ID),
+		ProductID:                     stringAttr(resource.Attributes, "productId"),
+		Name:                          stringAttr(resource.Attributes, "name"),
+		State:                         stringAttr(resource.Attributes, "state"),
+		InAppPurchaseType:             stringAttr(resource.Attributes, "inAppPurchaseType"),
+		IsAppStoreReviewInProgress:    boolAttr(resource.Attributes, "isAppStoreReviewInProgress"),
+		SubmitWithNextAppStoreVersion: boolAttr(resource.Attributes, "submitWithNextAppStoreVersion"),
+	}
+}
+
+// FindReviewIAP finds a single app-scoped IAP through the private web flow.
+func (c *Client) FindReviewIAP(ctx context.Context, appID, iapID string) (ReviewIAP, bool, error) {
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return ReviewIAP{}, false, fmt.Errorf("app id is required")
+	}
+	iapID = strings.TrimSpace(iapID)
+	if iapID == "" {
+		return ReviewIAP{}, false, fmt.Errorf("iap id is required")
+	}
+
+	query := url.Values{}
+	query.Set("fields[inAppPurchases]", reviewIAPFields)
+	query.Set("limit", "300")
+	query.Set("sort", "name")
+
+	nextPath := queryPath("/apps/"+url.PathEscape(appID)+"/inAppPurchases", query)
+	visited := map[string]struct{}{}
+
+	for nextPath != "" {
+		if _, seen := visited[nextPath]; seen {
+			return ReviewIAP{}, false, fmt.Errorf("review iaps pagination loop detected")
+		}
+		visited[nextPath] = struct{}{}
+
+		responseBody, err := c.doRequest(ctx, http.MethodGet, nextPath, nil)
+		if err != nil {
+			return ReviewIAP{}, false, err
+		}
+
+		var payload jsonAPIListPayload
+		if err := json.Unmarshal(responseBody, &payload); err != nil {
+			return ReviewIAP{}, false, fmt.Errorf("failed to parse review iaps response: %w", err)
+		}
+		for _, resource := range payload.Data {
+			if strings.TrimSpace(resource.ID) == iapID {
+				return decodeReviewIAP(resource), true, nil
+			}
+		}
+
+		nextLink, err := extractNextLink(payload.Links)
+		if err != nil {
+			return ReviewIAP{}, false, fmt.Errorf("failed to parse review iaps pagination links: %w", err)
+		}
+		if strings.TrimSpace(nextLink) == "" {
+			break
+		}
+		nextPath, err = normalizeNextPath(nextLink, c.baseURL)
+		if err != nil {
+			return ReviewIAP{}, false, fmt.Errorf("failed to normalize review iaps pagination link: %w", err)
+		}
+	}
+
+	return ReviewIAP{}, false, nil
 }
 
 // CreateInAppPurchaseSubmission attaches a non-renewing in-app purchase to the

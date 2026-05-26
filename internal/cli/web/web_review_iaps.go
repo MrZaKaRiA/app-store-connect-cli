@@ -14,12 +14,8 @@ import (
 	webcore "github.com/rudrankriyam/App-Store-Connect-CLI/internal/web"
 )
 
-type reviewIAPIAPListClient interface {
-	GetInAppPurchasesV2(ctx context.Context, appID string, opts ...asc.IAPOption) (*asc.InAppPurchasesV2Response, error)
-}
-
-var newReviewIAPASCClientFn = func() (reviewIAPIAPListClient, error) {
-	return shared.GetASCClient()
+type reviewIAPFinder interface {
+	FindReviewIAP(ctx context.Context, appID, iapID string) (webcore.ReviewIAP, bool, error)
 }
 
 type reviewIAPMutationOutput struct {
@@ -78,37 +74,13 @@ func validateReviewIAPAttachInputs(appID, iapID string, confirm bool) error {
 	}
 }
 
-func verifyReviewIAPBelongsToApp(ctx context.Context, client reviewIAPIAPListClient, appID, iapID string) error {
+func verifyReviewIAPBelongsToApp(ctx context.Context, client reviewIAPFinder, appID, iapID string) error {
 	if client == nil {
 		return fmt.Errorf("app-scoped IAP verification client is required")
 	}
 
-	resp, err := client.GetInAppPurchasesV2(ctx, appID, asc.WithIAPLimit(200))
+	_, found, err := client.FindReviewIAP(ctx, appID, iapID)
 	if err != nil {
-		return fmt.Errorf("verify in-app purchase %q under app %q: %w", iapID, appID, err)
-	}
-
-	found := false
-	if err := asc.PaginateEach(
-		ctx,
-		resp,
-		func(ctx context.Context, nextURL string) (asc.PaginatedResponse, error) {
-			return client.GetInAppPurchasesV2(ctx, appID, asc.WithIAPNextURL(nextURL))
-		},
-		func(page asc.PaginatedResponse) error {
-			iaps, ok := page.(*asc.InAppPurchasesV2Response)
-			if !ok {
-				return fmt.Errorf("unexpected in-app purchases pagination type %T", page)
-			}
-			for _, iap := range iaps.Data {
-				if strings.TrimSpace(iap.ID) == iapID {
-					found = true
-					return nil
-				}
-			}
-			return nil
-		},
-	); err != nil {
 		return fmt.Errorf("verify in-app purchase %q under app %q: %w", iapID, appID, err)
 	}
 	if !found {
@@ -180,19 +152,15 @@ func WebReviewIAPsAttachCommand() *ffcli.Command {
 			requestCtx, cancel := shared.ContextWithTimeout(ctx)
 			defer cancel()
 
-			ascClient, err := newReviewIAPASCClientFn()
-			if err != nil {
-				return fmt.Errorf("web review iaps attach: app-scoped IAP verification requires App Store Connect API credentials: %w", err)
-			}
-			if err := verifyReviewIAPBelongsToApp(requestCtx, ascClient, trimmedAppID, trimmedIAPID); err != nil {
-				return fmt.Errorf("web review iaps attach: %w", err)
-			}
-
 			session, err := resolveWebSessionForCommand(requestCtx, authFlags)
 			if err != nil {
 				return err
 			}
 			client := newWebClientFn(session)
+
+			if err := verifyReviewIAPBelongsToApp(requestCtx, client, trimmedAppID, trimmedIAPID); err != nil {
+				return fmt.Errorf("web review iaps attach: %w", err)
+			}
 
 			submission, err := withWebSpinnerValue("Attaching IAP to next app version", func() (webcore.ReviewIAPSubmission, error) {
 				return client.CreateInAppPurchaseSubmission(requestCtx, trimmedIAPID)

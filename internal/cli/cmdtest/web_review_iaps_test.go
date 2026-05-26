@@ -19,30 +19,12 @@ import (
 )
 
 func TestWebReviewIAPsAttachRootSuccess(t *testing.T) {
-	setupAuth(t)
 	setupCachedWebReviewIAPSession(t, "user@example.com")
 
 	requests := newRequestLog(3)
 	installDefaultTransport(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(req.Method + " " + req.URL.Host + req.URL.Path)
 		switch {
-		case req.Method == http.MethodGet &&
-			req.URL.Host == "api.appstoreconnect.apple.com" &&
-			req.URL.Path == "/v1/apps/123456789/inAppPurchasesV2":
-			if got := req.URL.Query().Get("limit"); got != "200" {
-				t.Fatalf("expected IAP verification limit=200, got %q", got)
-			}
-			return webReviewIAPJSONResponse(http.StatusOK, `{
-				"data": [{
-					"type": "inAppPurchases",
-					"id": "9000000001",
-					"attributes": {
-						"name": "Remove Ads",
-						"productId": "com.example.removeads",
-						"inAppPurchaseType": "NON_CONSUMABLE"
-					}
-				}]
-			}`, req), nil
 		case req.Method == http.MethodGet &&
 			req.URL.Host == "appstoreconnect.apple.com" &&
 			req.URL.Path == "/olympus/v1/session":
@@ -55,6 +37,24 @@ func TestWebReviewIAPsAttachRootSuccess(t *testing.T) {
 				"user": {
 					"emailAddress": "user@example.com"
 				}
+			}`, req), nil
+		case req.Method == http.MethodGet &&
+			req.URL.Host == "appstoreconnect.apple.com" &&
+			req.URL.Path == "/iris/v1/apps/123456789/inAppPurchases":
+			if got := req.URL.Query().Get("limit"); got != "300" {
+				t.Fatalf("expected web IAP lookup limit=300, got %q", got)
+			}
+			return webReviewIAPJSONResponse(http.StatusOK, `{
+				"data": [{
+					"type": "inAppPurchases",
+					"id": "9000000001",
+					"attributes": {
+						"name": "Remove Ads",
+						"productId": "com.example.removeads",
+						"inAppPurchaseType": "NON_CONSUMABLE",
+						"state": "READY_TO_SUBMIT"
+					}
+				}]
 			}`, req), nil
 		case req.Method == http.MethodPost &&
 			req.URL.Host == "appstoreconnect.apple.com" &&
@@ -139,8 +139,8 @@ func TestWebReviewIAPsAttachRootSuccess(t *testing.T) {
 	}
 
 	wantRequests := []string{
-		"GET api.appstoreconnect.apple.com/v1/apps/123456789/inAppPurchasesV2",
 		"GET appstoreconnect.apple.com/olympus/v1/session",
+		"GET appstoreconnect.apple.com/iris/v1/apps/123456789/inAppPurchases",
 		"POST appstoreconnect.apple.com/iris/v1/inAppPurchaseSubmissions",
 	}
 	if got := requests.Snapshot(); strings.Join(got, "\n") != strings.Join(wantRequests, "\n") {

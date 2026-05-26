@@ -10,15 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/asc"
 	webcore "github.com/rudrankriyam/App-Store-Connect-CLI/internal/web"
 )
-
-type reviewIAPIAPListClientFunc func(ctx context.Context, appID string, opts ...asc.IAPOption) (*asc.InAppPurchasesV2Response, error)
-
-func (fn reviewIAPIAPListClientFunc) GetInAppPurchasesV2(ctx context.Context, appID string, opts ...asc.IAPOption) (*asc.InAppPurchasesV2Response, error) {
-	return fn(ctx, appID, opts...)
-}
 
 func TestWebReviewIAPsAttachRequiresApp(t *testing.T) {
 	cmd := WebReviewIAPsAttachCommand()
@@ -125,36 +118,42 @@ func TestWebReviewIAPsAttachRejectsNonNumericIAPID(t *testing.T) {
 func TestWebReviewIAPsAttachVerifiesIAPBelongsToAppBeforeMutating(t *testing.T) {
 	_ = stubWebProgressLabels(t)
 
-	origASCClient := newReviewIAPASCClientFn
 	origResolveSession := resolveSessionFn
 	t.Cleanup(func() {
-		newReviewIAPASCClientFn = origASCClient
 		resolveSessionFn = origResolveSession
 	})
 
 	verified := false
-	newReviewIAPASCClientFn = func() (reviewIAPIAPListClient, error) {
-		return reviewIAPIAPListClientFunc(func(ctx context.Context, appID string, opts ...asc.IAPOption) (*asc.InAppPurchasesV2Response, error) {
-			if appID != "123456789" {
-				t.Fatalf("expected app ID 123456789, got %q", appID)
-			}
-			verified = true
-			return &asc.InAppPurchasesV2Response{
-				Data: []asc.Resource[asc.InAppPurchaseV2Attributes]{
-					{Type: asc.ResourceTypeInAppPurchases, ID: "9000000001"},
-				},
-			}, nil
-		}), nil
-	}
-
 	resolveSessionFn = func(ctx context.Context, appleID, password, twoFactorCode string) (*webcore.AuthSession, string, error) {
 		return &webcore.AuthSession{
 			Client: &http.Client{
 				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-					if !verified {
-						t.Fatal("expected app-scoped IAP verification before web mutation")
-					}
-					if req.Method != http.MethodPost || req.URL.Path != "/iris/v1/inAppPurchaseSubmissions" {
+					switch {
+					case req.Method == http.MethodGet && req.URL.Path == "/iris/v1/apps/123456789/inAppPurchases":
+						verified = true
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Header:     http.Header{"Content-Type": []string{"application/json"}},
+							Body: io.NopCloser(strings.NewReader(`{
+								"data": [{
+									"type": "inAppPurchases",
+									"id": "9000000001",
+									"attributes": {
+										"name": "Remove Ads",
+										"productId": "com.example.removeads",
+										"inAppPurchaseType": "NON_CONSUMABLE",
+										"state": "READY_TO_SUBMIT",
+										"submitWithNextAppStoreVersion": false
+									}
+								}]
+							}`)),
+							Request: req,
+						}, nil
+					case req.Method == http.MethodPost && req.URL.Path == "/iris/v1/inAppPurchaseSubmissions":
+						if !verified {
+							t.Fatal("expected app-scoped IAP verification before web mutation")
+						}
+					default:
 						t.Fatalf("unexpected request: %s %s", req.Method, req.URL.Path)
 					}
 					requestBody, err := io.ReadAll(req.Body)
@@ -224,21 +223,27 @@ func TestWebReviewIAPsAttachVerifiesIAPBelongsToAppBeforeMutating(t *testing.T) 
 }
 
 func TestWebReviewIAPsAttachRefusesIAPOutsideApp(t *testing.T) {
-	origASCClient := newReviewIAPASCClientFn
 	origResolveSession := resolveSessionFn
 	t.Cleanup(func() {
-		newReviewIAPASCClientFn = origASCClient
 		resolveSessionFn = origResolveSession
 	})
 
-	newReviewIAPASCClientFn = func() (reviewIAPIAPListClient, error) {
-		return reviewIAPIAPListClientFunc(func(ctx context.Context, appID string, opts ...asc.IAPOption) (*asc.InAppPurchasesV2Response, error) {
-			return &asc.InAppPurchasesV2Response{}, nil
-		}), nil
-	}
 	resolveSessionFn = func(ctx context.Context, appleID, password, twoFactorCode string) (*webcore.AuthSession, string, error) {
-		t.Fatal("web session should not resolve when IAP is outside the app")
-		return nil, "", nil
+		return &webcore.AuthSession{
+			Client: &http.Client{
+				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					if req.Method != http.MethodGet || req.URL.Path != "/iris/v1/apps/123456789/inAppPurchases" {
+						t.Fatalf("unexpected request before app-scoping refusal: %s %s", req.Method, req.URL.Path)
+					}
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": []string{"application/json"}},
+						Body:       io.NopCloser(strings.NewReader(`{"data":[]}`)),
+						Request:    req,
+					}, nil
+				}),
+			},
+		}, "cache", nil
 	}
 
 	cmd := WebReviewIAPsAttachCommand()
