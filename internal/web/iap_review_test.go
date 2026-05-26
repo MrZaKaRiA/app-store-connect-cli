@@ -21,8 +21,12 @@ func TestFindReviewIAPReturnsFirstMatchingAppScopedIAP(t *testing.T) {
 			t.Fatalf("expected limit=300, got %q", got)
 		}
 		fields := r.URL.Query().Get("fields[inAppPurchases]")
+		fieldTokens := map[string]bool{}
+		for _, field := range strings.Split(fields, ",") {
+			fieldTokens[strings.TrimSpace(field)] = true
+		}
 		for _, want := range []string{"productId", "referenceName", "state"} {
-			if !strings.Contains(fields, want) {
+			if !fieldTokens[want] {
 				t.Fatalf("expected fields to contain %q, got %q", want, fields)
 			}
 		}
@@ -30,7 +34,7 @@ func TestFindReviewIAPReturnsFirstMatchingAppScopedIAP(t *testing.T) {
 		// (verified against /apps/{APP_ID}/inAppPurchases) — guard against
 		// re-adding them in a future patch.
 		for _, forbidden := range []string{"name", "inAppPurchaseType", "isAppStoreReviewInProgress", "submitWithNextAppStoreVersion"} {
-			if strings.Contains(fields, forbidden) {
+			if fieldTokens[forbidden] {
 				t.Fatalf("fields must not include %q (iris rejects it): %q", forbidden, fields)
 			}
 		}
