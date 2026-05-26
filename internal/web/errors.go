@@ -62,16 +62,19 @@ func IsAlreadyExistsConflict(err error) bool {
 		return strings.Contains(body, "already exists") && !conflictTextMentionsDifferentTarget(body)
 	}
 
+	if len(payload.Errors) == 0 {
+		return false
+	}
 	for _, e := range payload.Errors {
 		code := strings.ToUpper(strings.TrimSpace(e.Code))
 		detail := strings.ToLower(strings.TrimSpace(e.Detail))
 		title := strings.ToLower(strings.TrimSpace(e.Title))
 		text := detail + " " + title
-		if strings.Contains(code, "ALREADY_EXISTS") && !conflictTextMentionsDifferentTarget(text) {
-			return true
+		if !strings.Contains(code, "ALREADY_EXISTS") || conflictTextMentionsDifferentTarget(text) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func conflictTextMentionsDifferentTarget(text string) bool {

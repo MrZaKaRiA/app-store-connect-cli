@@ -104,6 +104,22 @@ func TestIsAlreadyExistsConflict(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "mixed already exists and blocking conflict",
+			err: &APIError{
+				Status: http.StatusConflict,
+				rawBody: []byte(`{
+					"errors":[{
+						"code":"ENTITY_ERROR.ATTRIBUTE.INVALID.ALREADY_EXISTS",
+						"title":"The request entity conflicts with the current state."
+					},{
+						"code":"STATE_ERROR.INVALID",
+						"detail":"This in-app purchase cannot be attached in the current state."
+					}]
+				}`),
+			},
+			want: false,
+		},
+		{
 			name: "other conflict",
 			err: &APIError{
 				Status:  http.StatusConflict,
