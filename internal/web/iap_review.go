@@ -142,6 +142,12 @@ func (c *Client) CreateInAppPurchaseSubmission(ctx context.Context, iapID string
 	if err := json.Unmarshal(responseBody, &payload); err != nil {
 		return ReviewIAPSubmission{}, fmt.Errorf("failed to parse iap submission response: %w", err)
 	}
+	if strings.TrimSpace(payload.Data.ID) == "" {
+		return ReviewIAPSubmission{}, fmt.Errorf("failed to parse iap submission response: missing submission id")
+	}
+	if payload.Data.Type != "" && payload.Data.Type != "inAppPurchaseSubmissions" {
+		return ReviewIAPSubmission{}, fmt.Errorf("failed to parse iap submission response: unexpected resource type %q", payload.Data.Type)
+	}
 
 	result := ReviewIAPSubmission{
 		ID:                            strings.TrimSpace(payload.Data.ID),

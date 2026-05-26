@@ -113,6 +113,28 @@ func TestFindReviewIAPReturnsFalseWhenMissing(t *testing.T) {
 	}
 }
 
+func TestFindReviewIAPRejectsEmptyAppID(t *testing.T) {
+	client := &Client{}
+	_, found, err := client.FindReviewIAP(context.Background(), "   ", "iap-1")
+	if err == nil {
+		t.Fatal("expected error for empty app id, got nil")
+	}
+	if found {
+		t.Fatal("expected empty app id to return found=false")
+	}
+}
+
+func TestFindReviewIAPRejectsEmptyIAPID(t *testing.T) {
+	client := &Client{}
+	_, found, err := client.FindReviewIAP(context.Background(), "app-123", "   ")
+	if err == nil {
+		t.Fatal("expected error for empty iap id, got nil")
+	}
+	if found {
+		t.Fatal("expected empty iap id to return found=false")
+	}
+}
+
 func TestCreateInAppPurchaseSubmissionSendsHiddenAttachPayload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/inAppPurchaseSubmissions" {
@@ -193,6 +215,43 @@ func TestCreateInAppPurchaseSubmissionFallsBackToRequestedIDWhenRelationshipMiss
 	}
 	if got.ID != "submission-2" || !got.SubmitWithNextAppStoreVersion {
 		t.Fatalf("unexpected payload: %#v", got)
+	}
+}
+
+func TestCreateInAppPurchaseSubmissionRejectsMissingSubmissionID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"type": "inAppPurchaseSubmissions",
+				"attributes": {"submitWithNextAppStoreVersion": true}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := testWebClient(server)
+	if _, err := client.CreateInAppPurchaseSubmission(context.Background(), "iap-1"); err == nil {
+		t.Fatal("expected error for missing submission id, got nil")
+	}
+}
+
+func TestCreateInAppPurchaseSubmissionRejectsUnexpectedResourceType(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"id": "submission-1",
+				"type": "unexpectedResources",
+				"attributes": {"submitWithNextAppStoreVersion": true}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := testWebClient(server)
+	if _, err := client.CreateInAppPurchaseSubmission(context.Background(), "iap-1"); err == nil {
+		t.Fatal("expected error for unexpected resource type, got nil")
 	}
 }
 

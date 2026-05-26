@@ -213,6 +213,17 @@ func TestWebReviewIAPsAttachArgumentParsingEdges(t *testing.T) {
 		args []string
 	}{
 		{
+			name: "root flag before subcommand",
+			args: []string{
+				"--profile", "ci",
+				"web", "review", "iaps", "attach",
+				"--app", "123456789",
+				"--iap-id", "9000000001",
+				"--apple-id", "attach",
+				"--confirm",
+			},
+		},
+		{
 			name: "mixed flag order",
 			args: []string{
 				"web", "review", "iaps", "attach",
@@ -236,11 +247,21 @@ func TestWebReviewIAPsAttachArgumentParsingEdges(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := RootCommand("1.2.3")
-			root.FlagSet.SetOutput(io.Discard)
+			setupCachedWebReviewIAPSession(t, "attach")
+			installSuccessfulWebReviewIAPAttachTransport(t, "attach")
 
-			if err := root.Parse(test.args); err != nil {
-				t.Fatalf("parse error: %v", err)
+			var code int
+			stdout, stderr := captureOutput(t, func() {
+				code = rootcmd.Run(test.args, "1.2.3")
+			})
+			if code != rootcmd.ExitSuccess {
+				t.Fatalf("exit code = %d, want %d\nstderr=%s", code, rootcmd.ExitSuccess, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("expected empty stderr, got %q", stderr)
+			}
+			if !strings.Contains(stdout, `"operation":"attach"`) {
+				t.Fatalf("expected attach JSON output, got %q", stdout)
 			}
 		})
 	}
@@ -303,6 +324,14 @@ func TestWebReviewIAPsAttachInvalidValueExitCodes(t *testing.T) {
 func setupCachedWebReviewIAPSession(t *testing.T, email string) {
 	t.Helper()
 
+	t.Setenv("ASC_BYPASS_KEYCHAIN", "1")
+	t.Setenv("ASC_PROFILE", "")
+	t.Setenv("ASC_KEY_ID", "")
+	t.Setenv("ASC_ISSUER_ID", "")
+	t.Setenv("ASC_PRIVATE_KEY_PATH", "")
+	t.Setenv("ASC_PRIVATE_KEY", "")
+	t.Setenv("ASC_PRIVATE_KEY_B64", "")
+	t.Setenv("ASC_STRICT_AUTH", "")
 	t.Setenv("ASC_WEB_SESSION_CACHE", "1")
 	t.Setenv("ASC_WEB_SESSION_CACHE_BACKEND", "file")
 	t.Setenv("ASC_WEB_SESSION_CACHE_DIR", t.TempDir())
@@ -330,6 +359,63 @@ func setupCachedWebReviewIAPSession(t *testing.T, email string) {
 	}); err != nil {
 		t.Fatalf("persist cached web session: %v", err)
 	}
+}
+
+func installSuccessfulWebReviewIAPAttachTransport(t *testing.T, email string) {
+	t.Helper()
+
+	installDefaultTransport(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodGet &&
+			req.URL.Host == "appstoreconnect.apple.com" &&
+			req.URL.Path == "/olympus/v1/session":
+			return webReviewIAPJSONResponse(http.StatusOK, `{
+				"provider": {
+					"providerId": 123456,
+					"publicProviderId": "team-1",
+					"name": "Team"
+				},
+				"user": {
+					"emailAddress": "`+email+`"
+				}
+			}`, req), nil
+		case req.Method == http.MethodGet &&
+			req.URL.Host == "appstoreconnect.apple.com" &&
+			req.URL.Path == "/iris/v1/apps/123456789/inAppPurchases":
+			return webReviewIAPJSONResponse(http.StatusOK, `{
+				"data": [{
+					"type": "inAppPurchases",
+					"id": "9000000001",
+					"attributes": {
+						"name": "Remove Ads",
+						"productId": "com.example.removeads",
+						"inAppPurchaseType": "NON_CONSUMABLE",
+						"state": "READY_TO_SUBMIT"
+					}
+				}]
+			}`, req), nil
+		case req.Method == http.MethodPost &&
+			req.URL.Host == "appstoreconnect.apple.com" &&
+			req.URL.Path == "/iris/v1/inAppPurchaseSubmissions":
+			return webReviewIAPJSONResponse(http.StatusCreated, `{
+				"data": {
+					"type": "inAppPurchaseSubmissions",
+					"id": "submission-1",
+					"attributes": {
+						"submitWithNextAppStoreVersion": true
+					},
+					"relationships": {
+						"inAppPurchaseV2": {
+							"data": {"type": "inAppPurchases", "id": "9000000001"}
+						}
+					}
+				}
+			}`, req), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	}))
 }
 
 func webReviewIAPJSONResponse(status int, body string, req *http.Request) *http.Response {
