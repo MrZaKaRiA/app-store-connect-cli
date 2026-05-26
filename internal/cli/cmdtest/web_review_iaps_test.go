@@ -260,8 +260,14 @@ func TestWebReviewIAPsAttachArgumentParsingEdges(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("expected empty stderr, got %q", stderr)
 			}
-			if !strings.Contains(stdout, `"operation":"attach"`) {
-				t.Fatalf("expected attach JSON output, got %q", stdout)
+			var payload struct {
+				Operation string `json:"operation"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+				t.Fatalf("expected valid JSON output, parse error: %v\nstdout=%q", err, stdout)
+			}
+			if payload.Operation != "attach" {
+				t.Fatalf("expected operation=attach, got %#v", payload)
 			}
 		})
 	}
