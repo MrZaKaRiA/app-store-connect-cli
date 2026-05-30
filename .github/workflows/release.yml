@@ -218,7 +218,9 @@ jobs:
           git remote add upstream https://github.com/microsoft/winget-pkgs.git
           git fetch upstream master --depth 1
           git fetch origin "${BRANCH}:refs/remotes/origin/${BRANCH}" --depth 1 || true
+          BRANCH_EXISTS=0
           if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            BRANCH_EXISTS=1
             git checkout -B "${BRANCH}" "origin/${BRANCH}"
           else
             git checkout -B "${BRANCH}" upstream/master
@@ -241,12 +243,15 @@ jobs:
           git config user.email "release-bot@rork.com"
           git add "manifests/r/Rorkai/ASC/${VERSION}"
           if git diff --cached --quiet; then
-            echo "WinGet manifests for ${VERSION} are already published or up to date."
-            exit 0
+            if [ "${BRANCH_EXISTS}" = "0" ]; then
+              echo "WinGet manifests for ${VERSION} are already published or up to date."
+              exit 0
+            fi
+            echo "WinGet manifests for ${VERSION} already exist on ${BRANCH}; checking for an open PR."
+          else
+            git commit -m "${PR_KIND}: Rorkai.ASC version ${VERSION}"
+            git push --force-with-lease origin "${BRANCH}"
           fi
-
-          git commit -m "${PR_KIND}: Rorkai.ASC version ${VERSION}"
-          git push --force-with-lease origin "${BRANCH}"
 
           if gh pr list --repo microsoft/winget-pkgs --state open --search "Rorkai.ASC version ${VERSION} in:title" --json number --jq '.[0].number // empty' | grep -q .; then
             echo "WinGet PR already exists for Rorkai.ASC ${VERSION}."
