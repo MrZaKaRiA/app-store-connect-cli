@@ -67,7 +67,7 @@ func TestRunScreenshotsUploadResumeRejectsExecutionModeFlags(t *testing.T) {
 				}
 			})
 
-			if !strings.Contains(stderr, "--resume cannot be combined with --skip-existing, --replace, or --dry-run") {
+			if !strings.Contains(stderr, "--resume cannot be combined with --skip-existing, --replace, --dry-run, or --max-screenshots") {
 				t.Fatalf("expected resume execution-mode conflict message, got %q", stderr)
 			}
 		})

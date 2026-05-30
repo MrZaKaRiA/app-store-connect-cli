@@ -223,6 +223,32 @@ func TestAssetsScreenshotsUploadCommandRejectsSkipExistingWithReplace(t *testing
 	}
 }
 
+func TestAssetsScreenshotsUploadCommandRejectsMaxScreenshotsWithResume(t *testing.T) {
+	cmd := AssetsScreenshotsUploadCommand()
+	cmd.FlagSet.SetOutput(io.Discard)
+	if err := cmd.FlagSet.Parse([]string{
+		"--resume", ".asc/reports/screenshots-upload/failures.json",
+		"--max-screenshots", "10",
+	}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	var runErr error
+	stdout, stderr := captureOutput(t, func() {
+		runErr = cmd.Exec(context.Background(), cmd.FlagSet.Args())
+	})
+
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !errors.Is(runErr, flag.ErrHelp) {
+		t.Fatalf("expected flag.ErrHelp, got %v", runErr)
+	}
+	if !strings.Contains(stderr, "--resume cannot be combined with --skip-existing, --replace, --dry-run, or --max-screenshots") {
+		t.Fatalf("expected max-screenshots resume error in stderr, got %q", stderr)
+	}
+}
+
 func TestExecuteScreenshotUploadCommandRejectsMoreThanTenScreenshotsBeforeAuth(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 11; i++ {

@@ -457,8 +457,8 @@ Examples:
 					strings.TrimSpace(*deviceType) != "" {
 					return shared.UsageError("--resume cannot be combined with --version-localization, --app, --version, --version-id, --platform, --path, or --device-type")
 				}
-				if *skipExisting || *replace || *dryRun {
-					return shared.UsageError("--resume cannot be combined with --skip-existing, --replace, or --dry-run")
+				if *skipExisting || *replace || *dryRun || *maxScreenshots != 0 {
+					return shared.UsageError("--resume cannot be combined with --skip-existing, --replace, --dry-run, or --max-screenshots")
 				}
 
 				client, err := shared.GetASCClient()
