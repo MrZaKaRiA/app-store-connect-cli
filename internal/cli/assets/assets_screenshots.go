@@ -78,6 +78,7 @@ type screenshotUploadConfig[T any] struct {
 	SkipExisting   bool
 	Replace        bool
 	DryRun         bool
+	MaxScreenshots int
 	RequestContext func(context.Context) (context.Context, context.CancelFunc)
 	UploadContext  func(context.Context) (context.Context, context.CancelFunc)
 	Access         ScreenshotSetAccess
@@ -120,6 +121,7 @@ type screenshotUploadFanoutConfig struct {
 	SkipExisting          bool
 	Replace               bool
 	DryRun                bool
+	MaxScreenshots        int
 
 	RequestContext   func(context.Context) (context.Context, context.CancelFunc)
 	UploadScreenshot func(context.Context, *asc.Client, string, string, []string, bool, bool, bool) (asc.AppScreenshotUploadResult, error)
@@ -612,6 +614,7 @@ func executeScreenshotUploadCommand(ctx context.Context, opts screenshotUploadCo
 			SkipExisting:   opts.SkipExisting,
 			Replace:        opts.Replace,
 			DryRun:         opts.DryRun,
+			MaxScreenshots: opts.MaxScreenshots,
 			RequestContext: deps.RequestContext,
 			UploadContext:  contextWithAssetUploadTimeout,
 			Access:         appStoreVersionScreenshotSetAccess,
@@ -663,6 +666,7 @@ func executeScreenshotUploadCommand(ctx context.Context, opts screenshotUploadCo
 		SkipExisting:          opts.SkipExisting,
 		Replace:               opts.Replace,
 		DryRun:                opts.DryRun,
+		MaxScreenshots:        opts.MaxScreenshots,
 		RequestContext:        deps.RequestContext,
 		UploadScreenshot:      deps.UploadScreenshot,
 		ExecuteUpload:         deps.ExecuteUpload,
@@ -726,6 +730,40 @@ func limitScreenshotFanoutUploadFiles(localeAssets []screenshotLocaleAssetFiles,
 		limited = append(limited, item)
 	}
 	return limited, nil
+}
+
+func limitScreenshotUploadFilesForExistingSet(files []string, maxScreenshots int, existingScreenshots []asc.Resource[asc.AppScreenshotAttributes], replace bool, setID string) ([]string, error) {
+	if maxScreenshots <= 0 {
+		return files, nil
+	}
+	if replace {
+		if len(files) > maxScreenshots {
+			return append([]string(nil), files[:maxScreenshots]...), nil
+		}
+		return files, nil
+	}
+
+	remaining := maxScreenshots - len(existingScreenshots)
+	if remaining <= 0 {
+		if len(files) == 0 {
+			return files, nil
+		}
+		setLabel := strings.TrimSpace(setID)
+		if setLabel == "" {
+			setLabel = "target set"
+		}
+		return nil, fmt.Errorf(
+			"%s already has %d screenshot(s); --max-screenshots %d leaves no upload slots. Pass --replace to replace existing screenshots or choose a higher limit up to %d",
+			setLabel,
+			len(existingScreenshots),
+			maxScreenshots,
+			appScreenshotSetMaxScreenshots,
+		)
+	}
+	if len(files) > remaining {
+		return append([]string(nil), files[:remaining]...), nil
+	}
+	return files, nil
 }
 
 func uploadScreenshotsFanout(ctx context.Context, cfg screenshotUploadFanoutConfig) (asc.AppScreenshotFanoutUploadResult, error) {
@@ -802,6 +840,7 @@ func uploadScreenshotsFanout(ctx context.Context, cfg screenshotUploadFanoutConf
 			SkipExisting:   cfg.SkipExisting,
 			Replace:        cfg.Replace,
 			DryRun:         cfg.DryRun,
+			MaxScreenshots: cfg.MaxScreenshots,
 			RequestContext: cfg.RequestContext,
 			UploadContext:  contextWithAssetUploadTimeout,
 			Access:         appStoreVersionScreenshotSetAccess,
@@ -1650,7 +1689,7 @@ func uploadScreenshotsWithConfig[T any](ctx context.Context, cfg screenshotUploa
 	}
 
 	existingScreenshots := make([]asc.Resource[asc.AppScreenshotAttributes], 0)
-	if (cfg.SkipExisting || cfg.Replace) && set.ID != "" {
+	if (cfg.SkipExisting || cfg.Replace || (cfg.MaxScreenshots > 0 && !cfg.Replace)) && set.ID != "" {
 		fetchCtx, fetchCancel := cfg.RequestContext(ctx)
 		existingResp, err := cfg.Client.GetAppScreenshots(fetchCtx, set.ID)
 		fetchCancel()
@@ -1668,6 +1707,10 @@ func uploadScreenshotsWithConfig[T any](ctx context.Context, cfg screenshotUploa
 		if filterErr != nil {
 			return zero, filterErr
 		}
+	}
+	files, err = limitScreenshotUploadFilesForExistingSet(files, cfg.MaxScreenshots, existingScreenshots, cfg.Replace, set.ID)
+	if err != nil {
+		return zero, err
 	}
 
 	if cfg.DryRun {
