@@ -904,12 +904,10 @@ func collectLocaleAssetFilesWithLimit(rootPath, displayType string, maxScreensho
 type screenshotMatchWalkOptions struct {
 	ignoreInvalidFiles bool
 	ignoreSymlinks     bool
-	maxMatches         int
 	onMatch            func(path string) error
 }
 
 func walkMatchingScreenshotFiles(rootPath, displayType string, opts screenshotMatchWalkOptions) error {
-	matchCount := 0
 	return filepath.WalkDir(rootPath, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -937,9 +935,6 @@ func walkMatchingScreenshotFiles(rootPath, displayType string, opts screenshotMa
 		if !info.Mode().IsRegular() || !isSupportedScreenshotUploadFile(path) {
 			return nil
 		}
-		if opts.maxMatches > 0 && matchCount >= opts.maxMatches {
-			return nil
-		}
 		if err := asc.ValidateImageFile(path); err != nil {
 			if opts.ignoreInvalidFiles {
 				return nil
@@ -959,7 +954,6 @@ func walkMatchingScreenshotFiles(rootPath, displayType string, opts screenshotMa
 		if err := opts.onMatch(path); err != nil {
 			return err
 		}
-		matchCount++
 		return nil
 	})
 }
@@ -969,9 +963,12 @@ func collectLocaleAssetFilesRecursive(rootPath, displayType string) ([]string, e
 }
 
 func collectLocaleAssetFilesRecursiveWithLimit(rootPath, displayType string, maxScreenshots int) ([]string, error) {
+	if maxScreenshots > 0 {
+		return collectLimitedLocaleAssetFilesRecursive(rootPath, displayType, maxScreenshots)
+	}
+
 	files := make([]string, 0)
 	err := walkMatchingScreenshotFiles(rootPath, displayType, screenshotMatchWalkOptions{
-		maxMatches: maxScreenshots,
 		onMatch: func(path string) error {
 			files = append(files, path)
 			return nil
@@ -982,6 +979,69 @@ func collectLocaleAssetFilesRecursiveWithLimit(rootPath, displayType string, max
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no screenshot files matching %s found in %q", displayType, rootPath)
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func collectLimitedLocaleAssetFilesRecursive(rootPath, displayType string, maxScreenshots int) ([]string, error) {
+	candidates, err := collectSupportedScreenshotCandidateFiles(rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]string, 0, min(maxScreenshots, len(candidates)))
+	for _, path := range candidates {
+		if len(files) >= maxScreenshots {
+			break
+		}
+		if err := asc.ValidateImageFile(path); err != nil {
+			return nil, err
+		}
+		matches, err := screenshotMatchesDisplayType(path, displayType)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
+			files = append(files, path)
+		}
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no screenshot files matching %s found in %q", displayType, rootPath)
+	}
+	return files, nil
+}
+
+func collectSupportedScreenshotCandidateFiles(rootPath string) ([]string, error) {
+	files := make([]string, 0)
+	err := filepath.WalkDir(rootPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path != rootPath && shouldIgnoreFanoutEntryName(entry.Name()) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to read symlink %q", path)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || !isSupportedScreenshotUploadFile(path) {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	sort.Strings(files)
 	return files, nil
