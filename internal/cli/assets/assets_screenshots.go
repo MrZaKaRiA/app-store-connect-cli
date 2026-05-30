@@ -597,11 +597,11 @@ func executeScreenshotUploadCommand(ctx context.Context, opts screenshotUploadCo
 		if err != nil {
 			return nil, err
 		}
-		if err := validateScreenshotDimensions(files, apiDisplayType); err != nil {
-			return nil, err
-		}
 		files, err = limitScreenshotUploadFiles(files, opts.MaxScreenshots, pathValue)
 		if err != nil {
+			return nil, err
+		}
+		if err := validateScreenshotDimensions(files, apiDisplayType); err != nil {
 			return nil, err
 		}
 		client, err := deps.GetClient()
