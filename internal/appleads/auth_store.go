@@ -66,9 +66,9 @@ func StoreCredentials(name string, credentials Credentials) error {
 	return StoreCredentialsConfig(name, credentials)
 }
 
-// StoreCredentialsConfig stores Apple Ads credentials in the global config file.
+// StoreCredentialsConfig stores Apple Ads credentials in the active config file.
 func StoreCredentialsConfig(name string, credentials Credentials) error {
-	path, err := config.GlobalPath()
+	path, err := config.Path()
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,10 @@ func RemoveCredentials(name string) error {
 	if name == "" {
 		return fmt.Errorf("credential name is required")
 	}
-	keychainErr := removeFromKeychain(name)
+	var keychainErr error
+	if !ShouldBypassKeychain() {
+		keychainErr = removeFromKeychain(name)
+	}
 	configErr := removeFromConfigIfPresent(name)
 	if keychainErr != nil && !isKeyringUnavailable(keychainErr) && !errors.Is(keychainErr, keyring.ErrKeyNotFound) {
 		return keychainErr
@@ -203,6 +206,9 @@ func SetDefaultCredentials(name string) error {
 // RemoveAllCredentials removes all Apple Ads credentials.
 func RemoveAllCredentials() error {
 	configErr := clearConfigCredentials()
+	if ShouldBypassKeychain() {
+		return configErr
+	}
 	keychainErr := removeAllFromKeychain()
 	if keychainErr != nil && !isKeyringUnavailable(keychainErr) {
 		return keychainErr
@@ -226,7 +232,7 @@ func keyringConfig() keyring.Config {
 	}
 }
 
-func openKeyring() (keyring.Keyring, error) {
+var openKeyring = func() (keyring.Keyring, error) {
 	return keyring.Open(keyringConfig())
 }
 
@@ -489,9 +495,15 @@ func loadConfigWithPath() (*config.Config, string, error) {
 	if !errors.Is(err, config.ErrNotFound) {
 		return nil, "", err
 	}
+	if strings.TrimSpace(os.Getenv("ASC_CONFIG_PATH")) != "" {
+		return nil, "", err
+	}
 	global, globalErr := config.GlobalPath()
 	if globalErr != nil {
 		return nil, "", globalErr
+	}
+	if global == path {
+		return nil, "", err
 	}
 	cfg, err = config.LoadAt(global)
 	if err != nil {

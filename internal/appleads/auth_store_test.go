@@ -1,0 +1,114 @@
+package appleads
+
+import (
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/99designs/keyring"
+
+	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/config"
+)
+
+func TestStoreCredentialsConfigUsesActiveConfigPath(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "active-config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+
+	if err := StoreCredentialsConfig("ads", testAdsCredentials()); err != nil {
+		t.Fatalf("StoreCredentialsConfig() error: %v", err)
+	}
+
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("LoadAt(active) error: %v", err)
+	}
+	if len(cfg.Ads.Keys) != 1 || cfg.Ads.Keys[0].Name != "ads" {
+		t.Fatalf("active config ads keys = %+v, want ads profile", cfg.Ads.Keys)
+	}
+}
+
+func TestLoadConfigWithPathDoesNotFallbackToGlobalWhenASCConfigPathSet(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	globalPath, err := config.GlobalPath()
+	if err != nil {
+		t.Fatalf("GlobalPath() error: %v", err)
+	}
+	if err := StoreCredentialsConfigAt("global", testAdsCredentials(), globalPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt(global) error: %v", err)
+	}
+
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	_, _, err = loadConfigWithPath()
+	if !errors.Is(err, config.ErrNotFound) {
+		t.Fatalf("loadConfigWithPath() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBypassKeychainRemovalSkipsKeychain(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")
+	if err := StoreCredentialsConfigAt("ads", testAdsCredentials(), configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	called := false
+	original := openKeyring
+	openKeyring = func() (keyring.Keyring, error) {
+		called = true
+		return nil, errors.New("keychain should be bypassed")
+	}
+	t.Cleanup(func() { openKeyring = original })
+
+	if err := RemoveCredentials("ads"); err != nil {
+		t.Fatalf("RemoveCredentials() error: %v", err)
+	}
+	if called {
+		t.Fatal("RemoveCredentials opened keychain despite ASC_ADS_BYPASS_KEYCHAIN")
+	}
+}
+
+func TestBypassKeychainRemoveAllSkipsKeychain(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")
+	if err := StoreCredentialsConfigAt("ads", testAdsCredentials(), configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	called := false
+	original := openKeyring
+	openKeyring = func() (keyring.Keyring, error) {
+		called = true
+		return nil, errors.New("keychain should be bypassed")
+	}
+	t.Cleanup(func() { openKeyring = original })
+
+	if err := RemoveAllCredentials(); err != nil {
+		t.Fatalf("RemoveAllCredentials() error: %v", err)
+	}
+	if called {
+		t.Fatal("RemoveAllCredentials opened keychain despite ASC_ADS_BYPASS_KEYCHAIN")
+	}
+
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("LoadAt() error: %v", err)
+	}
+	if len(cfg.Ads.Keys) != 0 || strings.TrimSpace(cfg.Ads.DefaultKeyName) != "" {
+		t.Fatalf("ads config after clear = %+v, want empty credentials", cfg.Ads)
+	}
+}
+
+func testAdsCredentials() Credentials {
+	return Credentials{
+		ClientID:       "CLIENT",
+		TeamID:         "TEAM",
+		KeyID:          "KEY",
+		PrivateKeyPath: "private-key.pem",
+		OrgID:          "123456",
+	}
+}
