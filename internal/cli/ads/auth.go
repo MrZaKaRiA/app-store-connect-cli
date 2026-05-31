@@ -412,6 +412,7 @@ type doctorCheck struct {
 func AuthLogoutCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("ads auth logout", flag.ExitOnError)
 	all := fs.Bool("all", false, "Remove all stored Apple Ads credentials")
+	confirm := fs.Bool("confirm", false, "Confirm removal of all Apple Ads credentials")
 	name := fs.String("name", "", "Remove a named Apple Ads credential")
 	return &ffcli.Command{
 		Name:       "logout",
@@ -420,7 +421,7 @@ func AuthLogoutCommand() *ffcli.Command {
 		LongHelp: `Remove stored Apple Ads credentials.
 
 Examples:
-  asc ads auth logout --all
+  asc ads auth logout --all --confirm
   asc ads auth logout --name "Ads"`,
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
@@ -434,6 +435,9 @@ Examples:
 			}
 			if trimmedName == "" && !*all {
 				return shared.UsageError("provide --name or --all")
+			}
+			if *all && !*confirm {
+				return shared.UsageError("--all requires --confirm")
 			}
 			if trimmedName != "" {
 				if err := appleads.RemoveCredentials(trimmedName); err != nil {
