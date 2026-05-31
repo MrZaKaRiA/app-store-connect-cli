@@ -76,6 +76,7 @@ func TestAdsCampaignsAliasPaginatesWithOrgContext(t *testing.T) {
 func TestAdsImpressionShareReportsLimitValidation(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_ADS_ORG_ID", "123456")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
 
 	root := RootCommand("dev")
 	if err := root.Parse([]string{"ads", "impression-share-reports", "--limit", "51", "--output", "json"}); err != nil {
@@ -93,6 +94,7 @@ func TestAdsImpressionShareReportsLimitValidation(t *testing.T) {
 func TestAdsDeleteRequiresConfirmBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_ADS_ORG_ID", "123456")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
 	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		t.Fatalf("unexpected network request: %s %s", req.Method, req.URL.String())
 		return nil, nil
@@ -135,6 +137,7 @@ func TestAdsEndpointRejectsUnexpectedArgsBeforeNetwork(t *testing.T) {
 
 func TestAdsAPIRequestRejectsNonAppleURLsBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
 	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		t.Fatalf("unexpected network request: %s %s", req.Method, req.URL.String())
 		return nil, nil

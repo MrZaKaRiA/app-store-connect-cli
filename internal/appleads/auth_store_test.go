@@ -92,6 +92,48 @@ func TestGetCredentialsFallsBackToConfigDefaultWhenKeychainHasNoDefault(t *testi
 	}
 }
 
+func TestGetCredentialsPrefersConfigDefaultOverSingleKeychainFallback(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	configCreds := testAdsCredentials()
+	configCreds.ClientID = "CONFIG_CLIENT"
+	if err := StoreCredentialsConfigAt("config-default", configCreds, configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	keychainPayload, err := json.Marshal(credentialPayload{
+		ClientID:       "KEYCHAIN_CLIENT",
+		TeamID:         "KEYCHAIN_TEAM",
+		KeyID:          "KEYCHAIN_KEY",
+		PrivateKeyPath: "keychain-private-key.pem",
+		OrgID:          "999999",
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+
+	original := openKeyring
+	openKeyring = func() (keyring.Keyring, error) {
+		return fakeAdsKeyring{
+			items: map[string]keyring.Item{
+				keyringKey("keychain-only"): {
+					Key:  keyringKey("keychain-only"),
+					Data: keychainPayload,
+				},
+			},
+		}, nil
+	}
+	t.Cleanup(func() { openKeyring = original })
+
+	credentials, source, err := GetCredentialsWithSource("")
+	if err != nil {
+		t.Fatalf("GetCredentialsWithSource() error: %v", err)
+	}
+	if source != "config" || credentials.Profile != "config-default" || credentials.ClientID != "CONFIG_CLIENT" {
+		t.Fatalf("credentials = %+v source = %q, want config default over keychain fallback", credentials, source)
+	}
+}
+
 func TestGetCredentialsPrefersActiveConfigProfileOverSameNamedKeychainProfile(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("ASC_CONFIG_PATH", configPath)
@@ -155,6 +197,14 @@ func TestBypassKeychainRemovalSkipsKeychain(t *testing.T) {
 	}
 	if called {
 		t.Fatal("RemoveCredentials opened keychain despite ASC_ADS_BYPASS_KEYCHAIN")
+	}
+
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("LoadAt() error: %v", err)
+	}
+	if len(cfg.Ads.Keys) != 0 {
+		t.Fatalf("ads config after removal = %+v, want no keys", cfg.Ads.Keys)
 	}
 }
 

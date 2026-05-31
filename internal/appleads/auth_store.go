@@ -122,6 +122,10 @@ func GetCredentialsWithSource(profile string) (Credentials, string, error) {
 		} else if ok {
 			return selected.Credentials, "config", nil
 		}
+	} else if selected, ok, err := findDefaultCredentialInActiveConfig(); err != nil {
+		return Credentials{}, "", err
+	} else if ok {
+		return selected.Credentials, "config", nil
 	}
 	if !ShouldBypassKeychain() {
 		credentials, err := listFromKeychain()
@@ -491,6 +495,26 @@ func findCredentialInActiveConfig(profile string) (StoredCredential, bool, error
 		return StoredCredential{}, false, err
 	}
 	selected, ok := selectCredential(profile, storedCredentialsFromConfig(cfg, path))
+	return selected, ok, nil
+}
+
+func findDefaultCredentialInActiveConfig() (StoredCredential, bool, error) {
+	path, err := config.Path()
+	if err != nil {
+		return StoredCredential{}, false, err
+	}
+	cfg, err := config.LoadAt(path)
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			return StoredCredential{}, false, nil
+		}
+		return StoredCredential{}, false, err
+	}
+	defaultName := strings.TrimSpace(cfg.Ads.DefaultKeyName)
+	if defaultName == "" {
+		return StoredCredential{}, false, nil
+	}
+	selected, ok := selectCredential(defaultName, storedCredentialsFromConfig(cfg, path))
 	return selected, ok, nil
 }
 
