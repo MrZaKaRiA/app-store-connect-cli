@@ -231,6 +231,11 @@ func executeAppScreenshotUpload(ctx context.Context, cfg screenshotUploadConfig[
 	defer cancel()
 
 	progress, uploadErr := uploadScreenshotsWithOrderState(uploadCtx, cfg.Client, prepared.Set.ID, prepared.OrderedIDs, prepared.Files, false)
+	if uploadErr == nil && cfg.SkipExisting && len(prepared.SkippedResults) > 0 {
+		if err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, prepared.Set.ID, cfg.Files, prepared.SkippedResults, progress.Results); err != nil {
+			return asc.AppScreenshotUploadResult{}, err
+		}
+	}
 
 	results := append(append([]asc.AssetUploadResultItem{}, prepared.SkippedResults...), progress.Results...)
 	result := buildAppScreenshotUploadResult(cfg.LocalizationID, prepared.Set, false, results)

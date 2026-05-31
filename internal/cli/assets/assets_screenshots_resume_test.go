@@ -16,7 +16,7 @@ import (
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/shared"
 )
 
-func TestExecuteAppScreenshotUploadSkipExistingDoesNotFetchOrderingWhenNoFilesRemain(t *testing.T) {
+func TestExecuteAppScreenshotUploadSkipExistingDoesNotPatchOrderingWhenAlreadyMatched(t *testing.T) {
 	filePath := writeAssetsTestPNG(t, t.TempDir(), "01-home.png")
 	checksum, err := computeFileChecksum(filePath)
 	if err != nil {
@@ -31,7 +31,9 @@ func TestExecuteAppScreenshotUploadSkipExistingDoesNotFetchOrderingWhenNoFilesRe
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/appScreenshots":
 			return assetsJSONResponse(http.StatusOK, fmt.Sprintf(`{"data":[{"type":"appScreenshots","id":"existing-1","attributes":{"fileName":"01-home.png","fileSize":100,"sourceFileChecksum":"%s"}}],"links":{}}`, checksum))
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
-			t.Fatalf("unexpected remote order lookup when skip-existing leaves no files to upload")
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-1"}],"links":{}}`)
+		case req.Method == http.MethodPatch && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			t.Fatalf("unexpected remote order patch when skip-existing order already matches")
 			return nil, nil
 		default:
 			t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
