@@ -479,6 +479,75 @@ func TestResumeAppScreenshotUploadSkipExistingPreservesPendingLocalOrder(t *test
 	}
 }
 
+func TestResumeAppScreenshotUploadSkipExistingRetriesOrderingWithoutIDs(t *testing.T) {
+	workDir := t.TempDir()
+	existingPath := writeAssetsTestPNG(t, workDir, "01-existing.png")
+	artifactPath := filepath.Join(workDir, "failure-artifact.json")
+
+	_, err := persistScreenshotUploadFailureArtifact(artifactPath, screenshotUploadFailureArtifact{
+		VersionLocalizationID: "LOC_123",
+		Path:                  artifactPath,
+		DisplayType:           "APP_IPHONE_65",
+		SkipExisting:          true,
+		SetID:                 "set-1",
+		Files:                 []string{existingPath},
+		Results: []asc.AssetUploadResultItem{
+			{FileName: filepath.Base(existingPath), FilePath: existingPath, AssetID: "existing-1", State: "skipped", Skipped: true},
+		},
+		Error:       "relationship lookup failed",
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		t.Fatalf("persistScreenshotUploadFailureArtifact() error: %v", err)
+	}
+
+	relationshipPatchCalled := false
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = assetsUploadRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"unrelated-1"},{"type":"appScreenshots","id":"existing-1"}],"links":{}}`)
+		case req.Method == http.MethodPatch && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read relationship patch body: %v", err)
+			}
+			var payload asc.RelationshipRequest
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode relationship patch body: %v", err)
+			}
+			gotIDs := make([]string, 0, len(payload.Data))
+			for _, item := range payload.Data {
+				gotIDs = append(gotIDs, item.ID)
+			}
+			wantIDs := []string{"existing-1", "unrelated-1"}
+			if !reflect.DeepEqual(gotIDs, wantIDs) {
+				t.Fatalf("relationship order = %v, want %v", gotIDs, wantIDs)
+			}
+			relationshipPatchCalled = true
+			return assetsJSONResponse(http.StatusNoContent, "")
+		default:
+			t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+	})
+
+	client := newAssetsUploadTestClient(t)
+	result, err := resumeAppScreenshotUpload(context.Background(), client, artifactPath)
+	if err != nil {
+		t.Fatalf("resumeAppScreenshotUpload() error: %v", err)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("expected preserved skipped result, got %#v", result.Results)
+	}
+	if !relationshipPatchCalled {
+		t.Fatal("expected relationship patch during resume")
+	}
+}
+
 func TestPersistScreenshotUploadFailureArtifactNormalizesPendingPathsForResume(t *testing.T) {
 	workDir := t.TempDir()
 	otherDir := t.TempDir()

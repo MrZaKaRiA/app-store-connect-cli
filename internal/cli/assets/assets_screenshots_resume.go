@@ -298,7 +298,8 @@ func resumeAppScreenshotUpload(ctx context.Context, client *asc.Client, artifact
 	if strings.TrimSpace(artifact.SetID) == "" {
 		return asc.AppScreenshotUploadResult{}, fmt.Errorf("resume artifact %q is missing setId", artifactPath)
 	}
-	if len(artifact.PendingFiles) == 0 && len(artifact.OrderedIDs) == 0 {
+	canRetrySkippedOrdering := artifact.SkipExisting && len(artifact.Files) > 0 && len(artifact.Results) > 0
+	if len(artifact.PendingFiles) == 0 && len(artifact.OrderedIDs) == 0 && !canRetrySkippedOrdering {
 		return asc.AppScreenshotUploadResult{}, fmt.Errorf("resume artifact %q has no pending files or ordering work", artifactPath)
 	}
 
