@@ -6199,6 +6199,13 @@ func TestGetBundleIDs_SplitsLongIdentifierFilter(t *testing.T) {
 			if req.URL.Path != "/v1/bundleIds" {
 				t.Fatalf("expected path /v1/bundleIds, got %s", req.URL.Path)
 			}
+			if requests == 2 {
+				if req.URL.Query().Get("cursor") != "chunk-one-next" {
+					t.Fatalf("expected next page cursor, got query %q", req.URL.RawQuery)
+				}
+				assertAuthorized(t, req)
+				return
+			}
 			filter := req.URL.Query().Get("filter[identifier]")
 			if filter == "" {
 				t.Fatal("expected filter[identifier]")
@@ -6208,18 +6215,19 @@ func TestGetBundleIDs_SplitsLongIdentifierFilter(t *testing.T) {
 			}
 			assertAuthorized(t, req)
 		},
-		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-1","attributes":{"identifier":"com.example.one"}}]}`),
-		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-2","attributes":{"identifier":"com.example.two"}}]}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-1","attributes":{"identifier":"com.example.one"}}],"links":{"next":"https://api.appstoreconnect.apple.com/v1/bundleIds?cursor=chunk-one-next"}}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-2","attributes":{"identifier":"com.example.one.more"}}]}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-3","attributes":{"identifier":"com.example.two"}}]}`),
 	)
 
 	resp, err := client.GetBundleIDs(context.Background(), WithBundleIDsFilterIdentifier(strings.Join(identifiers, ",")))
 	if err != nil {
 		t.Fatalf("GetBundleIDs() error: %v", err)
 	}
-	if requests < 2 {
-		t.Fatalf("expected long identifier filter to be split into multiple requests, got %d", requests)
+	if requests != 3 {
+		t.Fatalf("expected split requests to paginate each chunk, got %d", requests)
 	}
-	if len(resp.Data) != 2 {
+	if len(resp.Data) != 3 {
 		t.Fatalf("expected aggregated bundle IDs from split requests, got %d", len(resp.Data))
 	}
 }

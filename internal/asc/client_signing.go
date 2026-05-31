@@ -55,11 +55,18 @@ func (c *Client) getBundleIDsWithSplitIdentifierFilter(ctx context.Context, quer
 	for _, chunk := range chunks {
 		chunkQuery := *query
 		chunkQuery.identifier = strings.Join(chunk, ",")
-		resp, err := c.getBundleIDsPage(ctx, &chunkQuery)
-		if err != nil {
-			return nil, err
+
+		for {
+			resp, err := c.getBundleIDsPage(ctx, &chunkQuery)
+			if err != nil {
+				return nil, err
+			}
+			combined.Data = append(combined.Data, resp.Data...)
+			if strings.TrimSpace(resp.Links.Next) == "" {
+				break
+			}
+			chunkQuery = bundleIDsQuery{listQuery: listQuery{nextURL: resp.Links.Next}}
 		}
-		combined.Data = append(combined.Data, resp.Data...)
 	}
 
 	return combined, nil
@@ -67,7 +74,12 @@ func (c *Client) getBundleIDsWithSplitIdentifierFilter(ctx context.Context, quer
 
 func (c *Client) getBundleIDsPage(ctx context.Context, query *bundleIDsQuery) (*BundleIDsResponse, error) {
 	path := "/v1/bundleIds"
-	if queryString := buildBundleIDsQuery(query); queryString != "" {
+	if strings.TrimSpace(query.nextURL) != "" {
+		if err := validateNextURL(query.nextURL); err != nil {
+			return nil, fmt.Errorf("bundleIds: %w", err)
+		}
+		path = query.nextURL
+	} else if queryString := buildBundleIDsQuery(query); queryString != "" {
 		path += "?" + queryString
 	}
 
