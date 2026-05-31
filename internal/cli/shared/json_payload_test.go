@@ -152,4 +152,20 @@ func TestReadJSONFilePayloadKind(t *testing.T) {
 			t.Fatalf("unexpected payload: %q", string(payload))
 		}
 	})
+
+	t.Run("unsupported kind", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "payload.json")
+		if err := os.WriteFile(path, []byte(`{"name":"demo"}`), 0o600); err != nil {
+			t.Fatalf("write payload: %v", err)
+		}
+
+		_, err := ReadJSONFilePayloadKind(path, JSONPayloadKind("document"))
+		if err == nil {
+			t.Fatal("expected unsupported kind error")
+		}
+		if !strings.Contains(err.Error(), "unsupported JSON payload kind: document") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }

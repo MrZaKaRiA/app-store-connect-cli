@@ -167,7 +167,7 @@ asc ads auth login --name NAME --client-id CLIENT_ID --team-id TEAM_ID --key-id 
 asc ads auth status [--verbose] [--validate] [--output table|json]
 asc ads auth switch --name NAME
 asc ads auth token --confirm [--output text|json]
-asc ads auth doctor [--fix --confirm] [--output text|json]
+asc ads auth doctor [--output text|json]
 asc ads auth logout [--all | --name NAME]
 ```
 
@@ -186,8 +186,8 @@ Mirror the existing `asc auth` behavior:
 - `--local` requires keychain bypass, exactly like `asc auth login`.
 - Keychain is preferred; config fallback is allowed when bypassing keychain.
 - `auth status` supports `--verbose` and `--validate`, matching `asc auth status`.
-- `auth logout` supports `--all` and `--name` and does not require
-  `--confirm`, matching `asc auth logout`.
+- `auth logout` supports `--all` and `--name`. It requires one of those flags
+  so bare `asc ads auth logout` does not clear every stored Ads profile.
 
 Add config fields without changing existing App Store Connect credentials:
 

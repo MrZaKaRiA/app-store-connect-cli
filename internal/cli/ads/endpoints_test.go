@@ -83,7 +83,9 @@ func TestRawRequestRequiresOrgGuardrails(t *testing.T) {
 		wantErr     string
 	}{
 		{name: "me does not need org", path: "v5/me", requiresOrg: false},
+		{name: "me with query does not need org", path: "v5/me?fields=id", requiresOrg: false},
 		{name: "acls does not need org", path: "https://api.searchads.apple.com/api/v5/acls", requiresOrg: false},
+		{name: "absolute me with query does not need org", path: "https://api.searchads.apple.com/api/v5/me?fields=id", requiresOrg: false},
 		{name: "campaigns needs org", path: "v5/campaigns", requiresOrg: true},
 		{name: "reject non apple host", path: "https://example.com/api/v5/campaigns", wantErr: "Apple Ads v5 URL"},
 		{name: "reject path traversal", path: "v5/../campaigns", wantErr: "path traversal"},
@@ -143,6 +145,7 @@ func TestResolveCredentialsPrefersExplicitProfileAndStrictRejectsMixedSources(t 
 }
 
 func TestResolveClientRequiresOrgForOrgScopedEndpoints(t *testing.T) {
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "config.json"))
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	_, err := resolveClient(context.Background(), commonFlags{}, true)
 	if !errors.Is(err, flag.ErrHelp) {
@@ -190,6 +193,41 @@ func TestEnvCredentialsRejectsInvalidPrivateKeyBase64(t *testing.T) {
 	_, _, err := envCredentials()
 	if err == nil || !strings.Contains(err.Error(), "ASC_ADS_PRIVATE_KEY_B64 is not valid base64") {
 		t.Fatalf("envCredentials() error = %v, want invalid base64 error", err)
+	}
+}
+
+func TestResolveCredentialsStrictRejectsAccessTokenAndKeyEnv(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_STRICT_AUTH", "1")
+	t.Setenv("ASC_ADS_CLIENT_ID", "CLIENT")
+	t.Setenv("ASC_ADS_TEAM_ID", "TEAM")
+	t.Setenv("ASC_ADS_KEY_ID", "KEY")
+	t.Setenv("ASC_ADS_PRIVATE_KEY_PATH", "private-key.pem")
+
+	_, err := resolveCredentials(commonFlags{})
+	if err == nil || !strings.Contains(err.Error(), "mixed Apple Ads authentication sources") {
+		t.Fatalf("resolveCredentials() error = %v, want mixed source error", err)
+	}
+}
+
+func TestResolveCredentialsRejectsPartialEnvBeforeStoredFallback(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")
+	t.Setenv("ASC_ADS_CLIENT_ID", "CLIENT")
+	if err := appleads.StoreCredentialsConfigAt("profile-a", appleads.Credentials{
+		ClientID:       "STORED_CLIENT",
+		TeamID:         "STORED_TEAM",
+		KeyID:          "STORED_KEY",
+		PrivateKeyPath: "stored-private-key.pem",
+		OrgID:          "ORG",
+	}, configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	_, err := resolveCredentials(commonFlags{})
+	if err == nil || !strings.Contains(err.Error(), "incomplete Apple Ads environment credentials") {
+		t.Fatalf("resolveCredentials() error = %v, want incomplete env error", err)
 	}
 }
 

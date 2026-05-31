@@ -106,13 +106,21 @@ func rawRequestRequiresOrg(pathValue string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("--path must be a valid URL or v5 path: %w", err)
 	}
-	pathOnly := strings.TrimPrefix(trimmed, "/")
 	if parsed.IsAbs() {
 		if parsed.Scheme != "https" || parsed.Host != "api.searchads.apple.com" || !strings.HasPrefix(parsed.Path, "/api/v5/") {
 			return false, fmt.Errorf("--path must be an Apple Ads v5 URL")
 		}
-		pathOnly = strings.TrimPrefix(parsed.Path, "/api/")
+		pathOnly := strings.TrimPrefix(parsed.Path, "/api/")
+		return rawPathRequiresOrg(pathOnly)
 	}
+	pathOnly := strings.TrimPrefix(parsed.Path, "/")
+	if pathOnly == "" {
+		pathOnly = strings.TrimPrefix(trimmed, "/")
+	}
+	return rawPathRequiresOrg(pathOnly)
+}
+
+func rawPathRequiresOrg(pathOnly string) (bool, error) {
 	if !strings.HasPrefix(pathOnly, "v5/") {
 		return false, fmt.Errorf("--path must start with v5/")
 	}

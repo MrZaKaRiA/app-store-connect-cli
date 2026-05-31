@@ -240,6 +240,37 @@ func TestPaginateAllAggregatesOffsetPages(t *testing.T) {
 	}
 }
 
+func TestPaginateAllReportsClampedStartOffset(t *testing.T) {
+	client, err := NewClient(Credentials{AccessToken: "ACCESS", OrgID: "123456"}, WithHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if got := req.URL.Query().Get("offset"); got != "0" {
+				t.Fatalf("offset = %q, want 0", got)
+			}
+			return jsonResponse(200, `{"data":[{"id":1}],"pagination":{"itemsPerPage":1,"startIndex":0,"totalResults":1}}`), nil
+		}),
+	}))
+	if err != nil {
+		t.Fatalf("NewClient() error: %v", err)
+	}
+	campaigns, ok := EndpointByCommandPath("campaigns", "list")
+	if !ok {
+		t.Fatal("missing campaigns list endpoint")
+	}
+	raw, err := client.PaginateAll(context.Background(), campaigns, nil, nil, -10, 1, nil)
+	if err != nil {
+		t.Fatalf("PaginateAll() error: %v", err)
+	}
+	var parsed struct {
+		Pagination PageDetail `json:"pagination"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("Unmarshal() error: %v", err)
+	}
+	if parsed.Pagination.StartIndex != 0 {
+		t.Fatalf("StartIndex = %d, want 0", parsed.Pagination.StartIndex)
+	}
+}
+
 func assertClaim(t *testing.T, claims jwt.MapClaims, name, want string) {
 	t.Helper()
 	if got := claims[name]; got != want {

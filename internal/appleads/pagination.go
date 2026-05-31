@@ -71,7 +71,7 @@ func (c *Client) PaginateAll(ctx context.Context, spec EndpointSpec, pathParams 
 		Data: aggregated,
 		Pagination: PageDetail{
 			ItemsPerPage: pageSize,
-			StartIndex:   startOffset,
+			StartIndex:   max(0, startOffset),
 			TotalResults: total,
 		},
 	}

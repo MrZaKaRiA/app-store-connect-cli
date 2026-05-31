@@ -128,6 +128,9 @@ func GetCredentialsWithSource(profile string) (Credentials, string, error) {
 				}
 				return Credentials{}, "", fmt.Errorf("credentials not found for profile %q", profile)
 			}
+			if cfgCred, err := getCredentialFromConfig(""); err == nil {
+				return cfgCred.Credentials, "config", nil
+			}
 			if len(credentials) > 0 {
 				return Credentials{}, "", fmt.Errorf("default credentials not found")
 			}

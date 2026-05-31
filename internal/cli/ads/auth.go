@@ -359,8 +359,6 @@ Examples:
 func AuthDoctorCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("ads auth doctor", flag.ExitOnError)
 	output := shared.BindOutputFlagsWithAllowed(fs, "output", "text", "Output format: text, json", "text", "json")
-	fix := fs.Bool("fix", false, "Attempt to fix issues where possible")
-	confirm := fs.Bool("confirm", false, "Confirm applying fixes")
 	return &ffcli.Command{
 		Name:       "doctor",
 		ShortUsage: "asc ads auth doctor [flags]",
@@ -373,9 +371,6 @@ Examples:
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {
-			if *fix && !*confirm {
-				return shared.UsageError("--fix requires --confirm")
-			}
 			credentials, err := appleads.ListCredentials()
 			checks := []doctorCheck{}
 			if err != nil {
@@ -416,7 +411,7 @@ type doctorCheck struct {
 
 func AuthLogoutCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("ads auth logout", flag.ExitOnError)
-	all := fs.Bool("all", false, "Remove all stored Apple Ads credentials (default)")
+	all := fs.Bool("all", false, "Remove all stored Apple Ads credentials")
 	name := fs.String("name", "", "Remove a named Apple Ads credential")
 	return &ffcli.Command{
 		Name:       "logout",
@@ -425,7 +420,6 @@ func AuthLogoutCommand() *ffcli.Command {
 		LongHelp: `Remove stored Apple Ads credentials.
 
 Examples:
-  asc ads auth logout
   asc ads auth logout --all
   asc ads auth logout --name "Ads"`,
 		FlagSet:   fs,
@@ -437,6 +431,9 @@ Examples:
 			}
 			if trimmedName != "" && *all {
 				return shared.UsageError("--all and --name are mutually exclusive")
+			}
+			if trimmedName == "" && !*all {
+				return shared.UsageError("provide --name or --all")
 			}
 			if trimmedName != "" {
 				if err := appleads.RemoveCredentials(trimmedName); err != nil {

@@ -106,6 +106,11 @@ func TestAdsAuthEvalValidatesUsageErrors(t *testing.T) {
 	if !errors.Is(err, flag.ErrHelp) || !strings.Contains(stderr, "--all and --name are mutually exclusive") {
 		t.Fatalf("logout error = %v stderr = %q, want mutually exclusive usage error", err, stderr)
 	}
+
+	_, stderr, err = runAdsEvalCommand(t, "ads", "auth", "logout")
+	if !errors.Is(err, flag.ErrHelp) || !strings.Contains(stderr, "provide --name or --all") {
+		t.Fatalf("logout error = %v stderr = %q, want explicit target usage error", err, stderr)
+	}
 }
 
 func TestAdsAuthTokenEvalRequiresConfirm(t *testing.T) {

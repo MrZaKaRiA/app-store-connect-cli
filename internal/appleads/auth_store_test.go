@@ -1,6 +1,7 @@
 package appleads
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,50 @@ func TestLoadConfigWithPathDoesNotFallbackToGlobalWhenASCConfigPathSet(t *testin
 	_, _, err = loadConfigWithPath()
 	if !errors.Is(err, config.ErrNotFound) {
 		t.Fatalf("loadConfigWithPath() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestGetCredentialsFallsBackToConfigDefaultWhenKeychainHasNoDefault(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	if err := StoreCredentialsConfigAt("config-default", testAdsCredentials(), configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	keychainPayload, err := json.Marshal(credentialPayload{
+		ClientID:       "KEYCHAIN_CLIENT",
+		TeamID:         "KEYCHAIN_TEAM",
+		KeyID:          "KEYCHAIN_KEY",
+		PrivateKeyPath: "keychain-private-key.pem",
+		OrgID:          "999999",
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+
+	original := openKeyring
+	openKeyring = func() (keyring.Keyring, error) {
+		return fakeAdsKeyring{
+			items: map[string]keyring.Item{
+				keyringKey("keychain-only"): {
+					Key:  keyringKey("keychain-only"),
+					Data: keychainPayload,
+				},
+				keyringKey("keychain-other"): {
+					Key:  keyringKey("keychain-other"),
+					Data: keychainPayload,
+				},
+			},
+		}, nil
+	}
+	t.Cleanup(func() { openKeyring = original })
+
+	credentials, source, err := GetCredentialsWithSource("")
+	if err != nil {
+		t.Fatalf("GetCredentialsWithSource() error: %v", err)
+	}
+	if source != "config" || credentials.Profile != "config-default" || credentials.ClientID != "CLIENT" {
+		t.Fatalf("credentials = %+v source = %q, want config default profile", credentials, source)
 	}
 }
 
@@ -101,6 +146,53 @@ func TestBypassKeychainRemoveAllSkipsKeychain(t *testing.T) {
 	if len(cfg.Ads.Keys) != 0 || strings.TrimSpace(cfg.Ads.DefaultKeyName) != "" {
 		t.Fatalf("ads config after clear = %+v, want empty credentials", cfg.Ads)
 	}
+}
+
+type fakeAdsKeyring struct {
+	items map[string]keyring.Item
+}
+
+func (f fakeAdsKeyring) Get(key string) (keyring.Item, error) {
+	item, ok := f.items[key]
+	if !ok {
+		return keyring.Item{}, keyring.ErrKeyNotFound
+	}
+	return item, nil
+}
+
+func (f fakeAdsKeyring) GetMetadata(key string) (keyring.Metadata, error) {
+	item, ok := f.items[key]
+	if !ok {
+		return keyring.Metadata{}, keyring.ErrKeyNotFound
+	}
+	return keyring.Metadata{
+		Item: &keyring.Item{
+			Key:         item.Key,
+			Label:       item.Label,
+			Description: item.Description,
+		},
+	}, nil
+}
+
+func (f fakeAdsKeyring) Set(item keyring.Item) error {
+	f.items[item.Key] = item
+	return nil
+}
+
+func (f fakeAdsKeyring) Remove(key string) error {
+	if _, ok := f.items[key]; !ok {
+		return keyring.ErrKeyNotFound
+	}
+	delete(f.items, key)
+	return nil
+}
+
+func (f fakeAdsKeyring) Keys() ([]string, error) {
+	keys := make([]string, 0, len(f.items))
+	for key := range f.items {
+		keys = append(keys, key)
+	}
+	return keys, nil
 }
 
 func testAdsCredentials() Credentials {
