@@ -49,3 +49,11 @@ func SetLookupWebAuthKey(fn func(context.Context, *webcore.Client, string) (*web
 		lookupWebAuthKeyFn = prev
 	}
 }
+
+func SetSyncAppClipBundleIDCapability(fn func(context.Context, *webcore.Client, webcore.AppClipBundleIDCapabilitySyncRequest) (*webcore.AppClipBundleIDCapabilitySyncResult, error)) func() {
+	prev := syncAppClipBundleIDCapabilityFn
+	syncAppClipBundleIDCapabilityFn = fn
+	return func() {
+		syncAppClipBundleIDCapabilityFn = prev
+	}
+}
