@@ -56,6 +56,7 @@ var (
 	loadCachedSessionFn                      = webcore.LoadCachedSession
 	loadLastCachedSessionFn                  = webcore.LoadLastCachedSession
 	webLoginWithClientFn                     = webcore.LoginWithClient
+	selectWebProviderFn                      = webcore.SelectProvider
 	resolveSessionFn               any       = resolveSession
 	twoFactorStatusWriter          io.Writer = os.Stderr
 	sessionExpiredWriter           io.Writer = os.Stderr
@@ -87,11 +88,12 @@ func openTTY() (*os.File, error) {
 }
 
 type webAuthStatus struct {
-	Authenticated bool   `json:"authenticated"`
-	Source        string `json:"source,omitempty"`
-	AppleID       string `json:"appleId,omitempty"`
-	TeamID        string `json:"teamId,omitempty"`
-	ProviderID    int64  `json:"providerId,omitempty"`
+	Authenticated    bool   `json:"authenticated"`
+	Source           string `json:"source,omitempty"`
+	AppleID          string `json:"appleId,omitempty"`
+	TeamID           string `json:"teamId,omitempty"`
+	ProviderID       int64  `json:"providerId,omitempty"`
+	PublicProviderID string `json:"publicProviderId,omitempty"`
 }
 
 func signalProcessInterrupt() error {
@@ -626,6 +628,19 @@ func persistFreshResolvedSession(session *webcore.AuthSession) error {
 	return nil
 }
 
+func selectResolvedWebSessionProvider(ctx context.Context, session *webcore.AuthSession, selection webcore.ProviderSelection) error {
+	if selection.ProviderID == 0 && strings.TrimSpace(selection.PublicProviderID) == "" {
+		return nil
+	}
+	if err := selectWebProviderFn(ctx, session, selection); err != nil {
+		return fmt.Errorf("web provider selection failed: %w", err)
+	}
+	if err := persistWebSessionFn(session); err != nil {
+		return fmt.Errorf("web provider selection succeeded but failed to cache session: %w", err)
+	}
+	return nil
+}
+
 func resolveSession(ctx context.Context, appleID, password, twoFactorCode string, twoFactorCodeCommand ...string) (*webcore.AuthSession, string, error) {
 	command := ""
 	if len(twoFactorCodeCommand) > 0 {
@@ -673,11 +688,13 @@ func WebAuthLoginCommand() *ffcli.Command {
 	appleID := fs.String("apple-id", "", "Apple Account email")
 	twoFactorCode := bindDeprecatedTwoFactorCodeFlag(fs)
 	twoFactorCodeCommand := fs.String("two-factor-code-command", "", "Shell command that prints the 2FA code to stdout if verification is required")
+	providerID := fs.Int64("provider-id", 0, "Numeric App Store Connect provider ID to select for this web session")
+	publicProviderID := fs.String("public-provider-id", "", "Public App Store Connect provider/team ID to select for this web session")
 	output := shared.BindOutputFlags(fs)
 
 	return &ffcli.Command{
 		Name:       "login",
-		ShortUsage: "asc web auth login --apple-id EMAIL [--two-factor-code-command CMD]",
+		ShortUsage: "asc web auth login --apple-id EMAIL [--public-provider-id TEAM_ID]",
 		ShortHelp:  "[experimental] Authenticate unofficial Apple web session.",
 		LongHelp: fmt.Sprintf(
 			`EXPERIMENTAL / UNOFFICIAL / DISCOURAGED
@@ -694,10 +711,15 @@ Two-factor input options:
   - %s environment variable (recommended for automation)
   - --two-factor-code (deprecated compatibility alias when the code is already known)
 
+Provider selection:
+  - --public-provider-id selects the public App Store Connect provider/team ID
+  - --provider-id selects Apple's numeric App Store Connect provider ID
+
 `+webWarningText+`
 
 Examples:
   asc web auth login --apple-id "user@example.com"
+  asc web auth login --apple-id "user@example.com" --public-provider-id "Z4N6A5FQKW"
   %s asc web auth login --apple-id "user@example.com"
   %s='osascript /path/to/get-apple-2fa-code.scpt' asc web auth login --apple-id "user@example.com"`,
 			webPasswordEnvDisplay(),
@@ -716,13 +738,21 @@ Examples:
 			if err != nil {
 				return err
 			}
+			selection := webcore.ProviderSelection{
+				ProviderID:       *providerID,
+				PublicProviderID: *publicProviderID,
+			}
+			if err := selectResolvedWebSessionProvider(requestCtx, session, selection); err != nil {
+				return err
+			}
 
 			status := webAuthStatus{
-				Authenticated: true,
-				Source:        source,
-				AppleID:       session.UserEmail,
-				TeamID:        session.TeamID,
-				ProviderID:    session.ProviderID,
+				Authenticated:    true,
+				Source:           source,
+				AppleID:          session.UserEmail,
+				TeamID:           session.TeamID,
+				ProviderID:       session.ProviderID,
+				PublicProviderID: session.PublicProviderID,
 			}
 			return shared.PrintOutput(status, *output.Output, *output.Pretty)
 		},
@@ -774,11 +804,12 @@ If --apple-id is not provided, this checks the last cached session.
 				return shared.PrintOutput(webAuthStatus{Authenticated: false}, *output.Output, *output.Pretty)
 			}
 			return shared.PrintOutput(webAuthStatus{
-				Authenticated: true,
-				Source:        "cache",
-				AppleID:       session.UserEmail,
-				TeamID:        session.TeamID,
-				ProviderID:    session.ProviderID,
+				Authenticated:    true,
+				Source:           "cache",
+				AppleID:          session.UserEmail,
+				TeamID:           session.TeamID,
+				ProviderID:       session.ProviderID,
+				PublicProviderID: session.PublicProviderID,
 			}, *output.Output, *output.Pretty)
 		},
 	}
