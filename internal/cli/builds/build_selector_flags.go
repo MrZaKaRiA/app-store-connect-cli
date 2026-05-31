@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/asc"
+	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/shared"
 )
 
 type buildSelectorFlags struct {
@@ -102,6 +103,14 @@ func (s buildSelectorFlags) resolveOptions() ResolveBuildOptions {
 
 func (s buildSelectorFlags) validate() error {
 	return validateResolveBuildOptions(s.resolveOptions())
+}
+
+func (s buildSelectorFlags) validateNextPageSelectorFlags() error {
+	opts := s.resolveOptions()
+	if opts.ExcludeExpired && !opts.Latest {
+		return shared.UsageError("--exclude-expired and --not-expired require --latest")
+	}
+	return nil
 }
 
 func (s buildSelectorFlags) resolveBuild(ctx context.Context, client *asc.Client) (*asc.BuildResponse, error) {
