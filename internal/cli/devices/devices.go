@@ -2,6 +2,7 @@ package devices
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,6 +19,8 @@ import (
 )
 
 const defaultLocalUDIDCommandTimeout = 10 * time.Second
+
+var errExistingDeviceFound = errors.New("existing device found")
 
 var (
 	localUDIDGOOS           = runtime.GOOS
@@ -364,23 +367,26 @@ func findExistingDeviceByNormalizedUDID(ctx context.Context, client *asc.Client,
 		return nil, err
 	}
 
-	pages, err := asc.PaginateAll(ctx, firstPage, func(ctx context.Context, nextURL string) (asc.PaginatedResponse, error) {
+	var found *asc.DeviceResponse
+	err = asc.PaginateEach(ctx, firstPage, func(ctx context.Context, nextURL string) (asc.PaginatedResponse, error) {
 		return client.GetDevices(ctx, asc.WithDevicesNextURL(nextURL))
+	}, func(page asc.PaginatedResponse) error {
+		devices, ok := page.(*asc.DevicesResponse)
+		if !ok || devices == nil {
+			return nil
+		}
+		for _, device := range devices.Data {
+			if normalizeDeviceUDIDForComparison(device.Attributes.UDID) == targetUDID {
+				found = &asc.DeviceResponse{Data: device}
+				return errExistingDeviceFound
+			}
+		}
+		return nil
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, errExistingDeviceFound) {
 		return nil, err
 	}
-
-	devices, ok := pages.(*asc.DevicesResponse)
-	if !ok || devices == nil {
-		return nil, nil
-	}
-	for _, device := range devices.Data {
-		if normalizeDeviceUDIDForComparison(device.Attributes.UDID) == targetUDID {
-			return &asc.DeviceResponse{Data: device}, nil
-		}
-	}
-	return nil, nil
+	return found, nil
 }
 
 func normalizeDeviceUDIDForComparison(value string) string {
