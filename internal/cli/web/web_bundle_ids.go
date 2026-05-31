@@ -169,6 +169,9 @@ func parseWebBundleIDCapabilitySettings(value string) ([]webcore.BundleIDCapabil
 	if err := decoder.Decode(&settings); err != nil {
 		return nil, err
 	}
+	if settings == nil {
+		return nil, fmt.Errorf("expected JSON array, got null")
+	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return nil, fmt.Errorf("multiple JSON values are not supported")

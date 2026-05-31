@@ -20,6 +20,8 @@ func TestWebBundleIDCapabilitiesSyncAppClipValidationErrors(t *testing.T) {
 		{name: "missing parent bundle id", args: []string{"--bundle-id", "clip-1", "--capability", "PUSH_NOTIFICATIONS"}, wantErr: "--parent-bundle-id is required"},
 		{name: "missing capability", args: []string{"--bundle-id", "clip-1", "--parent-bundle-id", "parent-1"}, wantErr: "--capability is required"},
 		{name: "invalid settings json", args: []string{"--bundle-id", "clip-1", "--parent-bundle-id", "parent-1", "--capability", "PUSH_NOTIFICATIONS", "--settings-json", `{"key":"BAD"}`}, wantErr: "--settings-json must be a JSON array"},
+		{name: "null settings json", args: []string{"--bundle-id", "clip-1", "--parent-bundle-id", "parent-1", "--capability", "PUSH_NOTIFICATIONS", "--settings-json", `null`}, wantErr: "--settings-json must be a JSON array"},
+		{name: "multiple settings json values", args: []string{"--bundle-id", "clip-1", "--parent-bundle-id", "parent-1", "--capability", "PUSH_NOTIFICATIONS", "--settings-json", `[] []`}, wantErr: "--settings-json must be a JSON array"},
 	}
 
 	for _, tc := range tests {
