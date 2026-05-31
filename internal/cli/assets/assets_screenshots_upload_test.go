@@ -320,6 +320,62 @@ func TestUploadScreenshotsSkipExistingSyncsLocalFileOrder(t *testing.T) {
 	}
 }
 
+func TestUploadScreenshotsSkipExistingSyncFailurePreservesResults(t *testing.T) {
+	dir := t.TempDir()
+	fileA := writeAssetsTestPNG(t, dir, "01-home.png")
+	fileB := writeAssetsTestPNG(t, dir, "02-settings.png")
+	const (
+		checksumA = "checksum-a"
+		checksumB = "checksum-b"
+	)
+	origChecksumFunc := screenshotFileChecksumFunc
+	screenshotFileChecksumFunc = func(path string) (string, error) {
+		switch path {
+		case fileA:
+			return checksumA, nil
+		case fileB:
+			return checksumB, nil
+		default:
+			return computeFileChecksum(path)
+		}
+	}
+	t.Cleanup(func() {
+		screenshotFileChecksumFunc = origChecksumFunc
+	})
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = assetsUploadRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/appStoreVersionLocalizations/LOC_123/appScreenshotSets":
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshotSets","id":"set-1","attributes":{"screenshotDisplayType":"APP_IPHONE_65"}}],"links":{}}`)
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/appScreenshots":
+			return assetsJSONResponse(http.StatusOK, fmt.Sprintf(`{"data":[{"type":"appScreenshots","id":"existing-b","attributes":{"fileName":"02-settings.png","fileSize":100,"sourceFileChecksum":"%s"}},{"type":"appScreenshots","id":"existing-a","attributes":{"fileName":"01-home.png","fileSize":100,"sourceFileChecksum":"%s"}}],"links":{}}`, checksumB, checksumA))
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-b"},{"type":"appScreenshots","id":"existing-a"}],"links":{}}`)
+		case req.Method == http.MethodPatch && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			return assetsJSONResponse(http.StatusInternalServerError, `{"errors":[{"status":"500","code":"INTERNAL_ERROR","detail":"reorder failed"}]}`)
+		default:
+			t.Fatalf("unexpected request in --skip-existing reorder failure: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+	})
+
+	client := newAssetsUploadTestClient(t)
+	result, err := uploadScreenshots(context.Background(), client, "LOC_123", "APP_IPHONE_65", []string{fileA, fileB}, true, false, false)
+	if err == nil {
+		t.Fatal("expected uploadScreenshots() error")
+	}
+	if len(result.Results) != 2 {
+		t.Fatalf("expected skipped results to be preserved, got %#v", result.Results)
+	}
+	if result.Results[0].AssetID != "existing-a" || result.Results[1].AssetID != "existing-b" {
+		t.Fatalf("expected skipped results in local order, got %#v", result.Results)
+	}
+}
+
 func TestExecuteAppScreenshotUploadSkipExistingSyncsLocalFileOrder(t *testing.T) {
 	dir := t.TempDir()
 	fileA := writeAssetsTestPNG(t, dir, "01-home.png")

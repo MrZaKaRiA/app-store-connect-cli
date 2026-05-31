@@ -33,7 +33,7 @@ func TestExecuteAppScreenshotUploadSkipExistingDoesNotPatchOrderingWhenAlreadyMa
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/appScreenshots":
 			return assetsJSONResponse(http.StatusOK, fmt.Sprintf(`{"data":[{"type":"appScreenshots","id":"existing-1","attributes":{"fileName":"01-home.png","fileSize":100,"sourceFileChecksum":"%s"}}],"links":{}}`, checksum))
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
-			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-1"}],"links":{}}`)
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-1"},{"type":"appScreenshots","id":"unrelated-1"}],"links":{}}`)
 		case req.Method == http.MethodPatch && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
 			t.Fatalf("unexpected remote order patch when skip-existing order already matches")
 			return nil, nil
@@ -275,7 +275,7 @@ func TestExecuteAppScreenshotUploadSkipExistingPatchFailurePersistsLocalOrder(t 
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/appScreenshots":
 			return assetsJSONResponse(http.StatusOK, fmt.Sprintf(`{"data":[{"type":"appScreenshots","id":"existing-1","attributes":{"fileName":"02-existing.png","fileSize":100,"sourceFileChecksum":"%s"}}],"links":{}}`, existingChecksum))
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
-			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-1"}],"links":{}}`)
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"existing-1"},{"type":"appScreenshots","id":"unrelated-1"}],"links":{}}`)
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/appScreenshots":
 			return assetsJSONResponse(http.StatusCreated, fmt.Sprintf(`{"data":{"type":"appScreenshots","id":"new-1","attributes":{"uploadOperations":[{"method":"PUT","url":"https://upload.example/new-1","length":%d,"offset":0}]}}}`, newSizeBytes))
 		case req.Method == http.MethodPut && req.URL.Host == "upload.example":
@@ -314,7 +314,7 @@ func TestExecuteAppScreenshotUploadSkipExistingPatchFailurePersistsLocalOrder(t 
 	if err != nil {
 		t.Fatalf("loadScreenshotUploadFailureArtifact() error: %v", err)
 	}
-	if got, want := strings.Join(artifactData.OrderedIDs, ","), "new-1,existing-1"; got != want {
+	if got, want := strings.Join(artifactData.OrderedIDs, ","), "new-1,existing-1,unrelated-1"; got != want {
 		t.Fatalf("expected artifact to preserve local file order %q, got %q", want, got)
 	}
 }
@@ -436,6 +436,8 @@ func TestResumeAppScreenshotUploadSkipExistingPreservesPendingLocalOrder(t *test
 			return assetsJSONResponse(http.StatusOK, `{"data":{"type":"appScreenshots","id":"pending-1","attributes":{"uploaded":true}}}`)
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshots/pending-1":
 			return assetsJSONResponse(http.StatusOK, `{"data":{"type":"appScreenshots","id":"pending-1","attributes":{"assetDeliveryState":{"state":"COMPLETE"}}}}`)
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
+			return assetsJSONResponse(http.StatusOK, `{"data":[{"type":"appScreenshots","id":"unrelated-1"},{"type":"appScreenshots","id":"new-1"},{"type":"appScreenshots","id":"existing-1"},{"type":"appScreenshots","id":"pending-1"}],"links":{}}`)
 		case req.Method == http.MethodPatch && req.URL.Path == "/v1/appScreenshotSets/set-1/relationships/appScreenshots":
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
@@ -471,7 +473,7 @@ func TestResumeAppScreenshotUploadSkipExistingPreservesPendingLocalOrder(t *test
 	if len(relationshipPatches) == 0 {
 		t.Fatal("expected relationship patch during resume")
 	}
-	wantFinalOrder := []string{"new-1", "pending-1", "existing-1"}
+	wantFinalOrder := []string{"new-1", "pending-1", "existing-1", "unrelated-1"}
 	if got := relationshipPatches[len(relationshipPatches)-1]; !reflect.DeepEqual(got, wantFinalOrder) {
 		t.Fatalf("final relationship order = %v, want %v", got, wantFinalOrder)
 	}

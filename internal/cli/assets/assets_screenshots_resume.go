@@ -231,10 +231,10 @@ func executeAppScreenshotUpload(ctx context.Context, cfg screenshotUploadConfig[
 	uploadCtx, cancel := cfg.UploadContext(ctx)
 	defer cancel()
 
-	progress, uploadErr := uploadScreenshotsWithOrderState(uploadCtx, cfg.Client, prepared.Set.ID, prepared.OrderedIDs, prepared.Files, false)
+	progress, uploadErr := uploadScreenshotsWithOrderState(uploadCtx, cfg.Client, prepared.Set.ID, prepared.OrderedIDs, prepared.Files, false, true)
 	if uploadErr == nil && cfg.SkipExisting && len(prepared.SkippedResults) > 0 {
-		desiredIDs := orderScreenshotIDsForLocalFiles(prepared.OrderedIDs, cfg.Files, prepared.SkippedResults, progress.Results)
-		if err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, prepared.Set.ID, cfg.Files, prepared.SkippedResults, progress.Results); err != nil {
+		desiredIDs, err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, prepared.Set.ID, cfg.Files, prepared.SkippedResults, progress.Results)
+		if err != nil {
 			if len(desiredIDs) > 0 {
 				progress.OrderedIDs = desiredIDs
 			}
@@ -255,7 +255,7 @@ func executeAppScreenshotUpload(ctx context.Context, cfg screenshotUploadConfig[
 	finalizeAppScreenshotUploadResult(&result)
 
 	orderedIDs := append([]string(nil), progress.OrderedIDs...)
-	if cfg.SkipExisting && len(prepared.SkippedResults) > 0 {
+	if cfg.SkipExisting && len(prepared.SkippedResults) > 0 && (len(prepared.Files) > 0 || strings.TrimSpace(progress.FailedFile) != "") {
 		desiredIDs := orderScreenshotIDsForLocalFiles(prepared.OrderedIDs, cfg.Files, prepared.SkippedResults, progress.Results)
 		if len(desiredIDs) > 0 {
 			orderedIDs = desiredIDs
@@ -305,7 +305,8 @@ func resumeAppScreenshotUpload(ctx context.Context, client *asc.Client, artifact
 	uploadCtx, cancel := contextWithAssetUploadTimeout(ctx)
 	defer cancel()
 
-	progress, uploadErr := uploadScreenshotsWithOrderState(uploadCtx, client, artifact.SetID, artifact.OrderedIDs, artifact.PendingFiles, true)
+	syncAfterUpload := !artifact.SkipExisting || len(artifact.Files) == 0
+	progress, uploadErr := uploadScreenshotsWithOrderState(uploadCtx, client, artifact.SetID, artifact.OrderedIDs, artifact.PendingFiles, true, syncAfterUpload)
 
 	result := asc.AppScreenshotUploadResult{
 		VersionLocalizationID: artifact.VersionLocalizationID,
@@ -317,8 +318,10 @@ func resumeAppScreenshotUpload(ctx context.Context, client *asc.Client, artifact
 
 	if uploadErr == nil && artifact.SkipExisting && len(artifact.Files) > 0 {
 		skippedResults, uploadedResults := splitSkippedScreenshotResults(result.Results)
-		desiredIDs := orderScreenshotIDsForLocalFiles(progress.OrderedIDs, artifact.Files, skippedResults, uploadedResults)
-		if len(desiredIDs) > 0 && !sameScreenshotIDOrder(progress.OrderedIDs, desiredIDs) {
+		currentOrder, err := GetOrderedAppScreenshotIDs(uploadCtx, client, artifact.SetID)
+		if err != nil {
+			uploadErr = err
+		} else if desiredIDs := orderScreenshotIDsForLocalFiles(currentOrder, artifact.Files, skippedResults, uploadedResults); len(desiredIDs) > 0 && !sameScreenshotIDOrder(currentOrder, desiredIDs) {
 			if err := SetOrderedAppScreenshots(uploadCtx, client, artifact.SetID, desiredIDs); err != nil {
 				progress.OrderedIDs = desiredIDs
 				uploadErr = err

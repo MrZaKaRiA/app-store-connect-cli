@@ -1829,8 +1829,9 @@ func uploadScreenshotsWithConfig[T any](ctx context.Context, cfg screenshotUploa
 		results = append(results, uploadedResults...)
 	}
 	if cfg.SkipExisting && len(skippedResults) > 0 {
-		if err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, set.ID, cfg.Files, skippedResults, results); err != nil {
-			return zero, err
+		if _, err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, set.ID, cfg.Files, skippedResults, results); err != nil {
+			results = append(skippedResults, results...)
+			return cfg.BuildResult(cfg.LocalizationID, set, false, results), err
 		}
 	}
 	results = append(skippedResults, results...)
@@ -1882,17 +1883,17 @@ func filterExistingScreenshotFiles(files []string, screenshots []asc.Resource[as
 	return filtered, skipped, nil
 }
 
-func syncSkippedScreenshotOrder(ctx context.Context, client *asc.Client, setID string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) error {
+func syncSkippedScreenshotOrder(ctx context.Context, client *asc.Client, setID string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) ([]string, error) {
 	currentOrder, err := GetOrderedAppScreenshotIDs(ctx, client, setID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	orderedIDs := orderScreenshotIDsForLocalFiles(currentOrder, files, skippedResults, uploadedResults)
 	if sameScreenshotIDOrder(currentOrder, orderedIDs) {
-		return nil
+		return orderedIDs, nil
 	}
-	return SetOrderedAppScreenshots(ctx, client, setID, orderedIDs)
+	return orderedIDs, SetOrderedAppScreenshots(ctx, client, setID, orderedIDs)
 }
 
 func orderScreenshotIDsForLocalFiles(currentOrder []string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) []string {
