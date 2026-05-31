@@ -111,6 +111,28 @@ func TestAdsDeleteRequiresConfirmBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestAdsEndpointRejectsUnexpectedArgsBeforeNetwork(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_ORG_ID", "123456")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	}))
+
+	root := RootCommand("dev")
+	if err := root.Parse([]string{"ads", "campaigns", "--output", "json", "unexpected"}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	var runErr error
+	_, stderr := captureOutput(t, func() {
+		runErr = root.Run(context.Background())
+	})
+	if !errors.Is(runErr, flag.ErrHelp) || !strings.Contains(stderr, "unexpected argument(s): unexpected") {
+		t.Fatalf("run error = %v stderr = %q, want unexpected argument usage error", runErr, stderr)
+	}
+}
+
 func TestAdsAPIRequestRejectsNonAppleURLsBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -128,6 +150,28 @@ func TestAdsAPIRequestRejectsNonAppleURLsBeforeNetwork(t *testing.T) {
 	})
 	if !errors.Is(runErr, flag.ErrHelp) || !strings.Contains(stderr, "Apple Ads v5 URL") {
 		t.Fatalf("run error = %v stderr = %q, want Apple host guardrail", runErr, stderr)
+	}
+}
+
+func TestAdsAPIRequestRejectsUnexpectedArgsBeforeNetwork(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_ORG_ID", "123456")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	}))
+
+	root := RootCommand("dev")
+	if err := root.Parse([]string{"ads", "api", "request", "--path", "v5/campaigns", "--output", "json", "unexpected"}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	var runErr error
+	_, stderr := captureOutput(t, func() {
+		runErr = root.Run(context.Background())
+	})
+	if !errors.Is(runErr, flag.ErrHelp) || !strings.Contains(stderr, "unexpected argument(s): unexpected") {
+		t.Fatalf("run error = %v stderr = %q, want unexpected argument usage error", runErr, stderr)
 	}
 }
 
