@@ -7,11 +7,17 @@ import (
 	"strings"
 )
 
+const bundleIDsIdentifierFilterMaxLength = 3900
+
 // GetBundleIDs retrieves the list of bundle IDs.
 func (c *Client) GetBundleIDs(ctx context.Context, opts ...BundleIDsOption) (*BundleIDsResponse, error) {
 	query := &bundleIDsQuery{}
 	for _, opt := range opts {
 		opt(query)
+	}
+
+	if query.nextURL == "" && shouldSplitBundleIDsIdentifierFilter(query.identifier) {
+		return c.getBundleIDsWithSplitIdentifierFilter(ctx, query)
 	}
 
 	path := "/v1/bundleIds"
@@ -36,6 +42,82 @@ func (c *Client) GetBundleIDs(ctx context.Context, opts ...BundleIDsOption) (*Bu
 	}
 
 	return &response, nil
+}
+
+func shouldSplitBundleIDsIdentifierFilter(identifier string) bool {
+	return len(strings.TrimSpace(identifier)) > bundleIDsIdentifierFilterMaxLength && strings.Contains(identifier, ",")
+}
+
+func (c *Client) getBundleIDsWithSplitIdentifierFilter(ctx context.Context, query *bundleIDsQuery) (*BundleIDsResponse, error) {
+	chunks := splitCSVByMaxLength(query.identifier, bundleIDsIdentifierFilterMaxLength)
+	combined := &BundleIDsResponse{}
+
+	for _, chunk := range chunks {
+		chunkQuery := *query
+		chunkQuery.identifier = strings.Join(chunk, ",")
+		resp, err := c.getBundleIDsPage(ctx, &chunkQuery)
+		if err != nil {
+			return nil, err
+		}
+		combined.Data = append(combined.Data, resp.Data...)
+	}
+
+	return combined, nil
+}
+
+func (c *Client) getBundleIDsPage(ctx context.Context, query *bundleIDsQuery) (*BundleIDsResponse, error) {
+	path := "/v1/bundleIds"
+	if queryString := buildBundleIDsQuery(query); queryString != "" {
+		path += "?" + queryString
+	}
+
+	data, err := c.do(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response BundleIDsResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &response, nil
+}
+
+func splitCSVByMaxLength(value string, maxLength int) [][]string {
+	parts := strings.Split(value, ",")
+	chunks := make([][]string, 0, 1)
+	current := make([]string, 0)
+	currentLength := 0
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		nextLength := len(part)
+		if currentLength > 0 {
+			nextLength += currentLength + 1
+		}
+		if len(current) > 0 && nextLength > maxLength {
+			chunks = append(chunks, current)
+			current = nil
+			currentLength = 0
+		}
+
+		current = append(current, part)
+		if currentLength == 0 {
+			currentLength = len(part)
+		} else {
+			currentLength += len(part) + 1
+		}
+	}
+
+	if len(current) > 0 {
+		chunks = append(chunks, current)
+	}
+	return chunks
 }
 
 // GetBundleID retrieves a single bundle ID by ID.

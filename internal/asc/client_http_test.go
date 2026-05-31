@@ -6183,6 +6183,47 @@ func TestGetBundleIDs_WithIdentifierFilter(t *testing.T) {
 	}
 }
 
+func TestGetBundleIDs_SplitsLongIdentifierFilter(t *testing.T) {
+	identifiers := make([]string, 0, 130)
+	for i := range 130 {
+		identifiers = append(identifiers, fmt.Sprintf("com.example.long.identifier.%03d.extension", i))
+	}
+
+	requests := 0
+	client := newTestClient(
+		t, func(req *http.Request) {
+			requests++
+			if req.Method != http.MethodGet {
+				t.Fatalf("expected GET, got %s", req.Method)
+			}
+			if req.URL.Path != "/v1/bundleIds" {
+				t.Fatalf("expected path /v1/bundleIds, got %s", req.URL.Path)
+			}
+			filter := req.URL.Query().Get("filter[identifier]")
+			if filter == "" {
+				t.Fatal("expected filter[identifier]")
+			}
+			if len(filter) > bundleIDsIdentifierFilterMaxLength {
+				t.Fatalf("expected filter[identifier] to be chunked below %d chars, got %d", bundleIDsIdentifierFilterMaxLength, len(filter))
+			}
+			assertAuthorized(t, req)
+		},
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-1","attributes":{"identifier":"com.example.one"}}]}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-2","attributes":{"identifier":"com.example.two"}}]}`),
+	)
+
+	resp, err := client.GetBundleIDs(context.Background(), WithBundleIDsFilterIdentifier(strings.Join(identifiers, ",")))
+	if err != nil {
+		t.Fatalf("GetBundleIDs() error: %v", err)
+	}
+	if requests < 2 {
+		t.Fatalf("expected long identifier filter to be split into multiple requests, got %d", requests)
+	}
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected aggregated bundle IDs from split requests, got %d", len(resp.Data))
+	}
+}
+
 func TestGetInAppPurchasesV2_WithLimit(t *testing.T) {
 	response := jsonResponse(http.StatusOK, `{"data":[{"type":"inAppPurchases","id":"iap-1","attributes":{"name":"Pro","productId":"com.example.pro","inAppPurchaseType":"CONSUMABLE"}}]}`)
 	client := newTestClient(t, func(req *http.Request) {
