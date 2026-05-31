@@ -276,6 +276,13 @@ func collectPathParams(spec appleads.EndpointSpec, flags endpointFlagValues) (ma
 		if param.Required && value == "" {
 			return nil, fmt.Errorf("--%s is required", param.Flag)
 		}
+		if value != "" && param.Type == appleads.ParamInt {
+			if parsed, err := strconv.ParseInt(value, 10, 64); err != nil {
+				return nil, fmt.Errorf("--%s must be an integer", param.Flag)
+			} else if parsed < 0 {
+				return nil, fmt.Errorf("--%s must be >= 0", param.Flag)
+			}
+		}
 		params[param.Name] = value
 	}
 	return params, nil

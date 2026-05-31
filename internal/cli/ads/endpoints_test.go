@@ -73,6 +73,11 @@ func TestCollectPathParamsRequiresDocumentedIdentifiers(t *testing.T) {
 	if params["campaignId"] != "123" {
 		t.Fatalf("campaignId = %q, want 123", params["campaignId"])
 	}
+
+	*flags.pathStrings["campaignId"] = "not-a-number"
+	if _, err := collectPathParams(campaign, flags); err == nil || !strings.Contains(err.Error(), "--campaign must be an integer") {
+		t.Fatalf("path error = %v, want integer validation", err)
+	}
 }
 
 func TestRawRequestRequiresOrgGuardrails(t *testing.T) {
