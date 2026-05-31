@@ -117,7 +117,7 @@ Examples:
 				}
 				requestCtx, cancel := requestContext(ctx)
 				defer cancel()
-				spec, _ := appleads.EndpointByCommandPath("me", "get")
+				spec, _ := appleads.EndpointByCommandPath("me", "view")
 				if _, err := client.Do(requestCtx, spec, nil, nil, nil); err != nil {
 					return fmt.Errorf("ads auth login: network validation failed: %w", err)
 				}
@@ -192,7 +192,7 @@ Examples:
 					client, err := appleads.NewClient(cred.Credentials)
 					if err == nil {
 						requestCtx, cancel := requestContext(ctx)
-						spec, _ := appleads.EndpointByCommandPath("me", "get")
+						spec, _ := appleads.EndpointByCommandPath("me", "view")
 						_, err = client.Do(requestCtx, spec, nil, nil, nil)
 						cancel()
 					}

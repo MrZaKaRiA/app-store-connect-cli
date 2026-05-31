@@ -152,9 +152,9 @@ func TestRequestSetsBearerAndOrganizationContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() error: %v", err)
 	}
-	me, ok := EndpointByCommandPath("me", "get")
+	me, ok := EndpointByCommandPath("me", "view")
 	if !ok {
-		t.Fatal("missing me get endpoint")
+		t.Fatal("missing me view endpoint")
 	}
 	if _, err := client.Do(context.Background(), me, nil, nil, nil); err != nil {
 		t.Fatalf("me Do() error: %v", err)

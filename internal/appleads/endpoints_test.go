@@ -43,6 +43,7 @@ func TestEndpointSpecsCoverCampaignManagementAPI5Surface(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"me view",
 		"campaigns list",
 		"ad-groups find-org",
 		"targeting-keywords delete-bulk",
@@ -57,7 +58,7 @@ func TestEndpointSpecsCoverCampaignManagementAPI5Surface(t *testing.T) {
 }
 
 func TestEndpointSpecsAuthenticationAndPaginationMetadata(t *testing.T) {
-	for _, path := range [][]string{{"me", "get"}, {"acls", "list"}} {
+	for _, path := range [][]string{{"me", "view"}, {"acls", "list"}} {
 		spec, ok := EndpointByCommandPath(path...)
 		if !ok {
 			t.Fatalf("missing endpoint %q", strings.Join(path, " "))

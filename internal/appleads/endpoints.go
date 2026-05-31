@@ -97,7 +97,7 @@ func endpoint(name, method, path string, commandPath []string, bodyKind BodyKind
 func EndpointSpecs() []EndpointSpec {
 	specs := []EndpointSpec{
 		endpoint("get-user-acl", "GET", "v5/acls", []string{"acls", "list"}, BodyNone, "", "UserAclListResponse", nil, nil),
-		endpoint("get-me-details", "GET", "v5/me", []string{"me", "get"}, BodyNone, "", "MeDetailResponse", nil, nil),
+		endpoint("get-me-details", "GET", "v5/me", []string{"me", "view"}, BodyNone, "", "MeDetailResponse", nil, nil),
 
 		endpoint("search-for-ios-apps", "GET", "v5/search/apps", []string{"apps", "search"}, BodyNone, "", "AppInfoListResponse", nil, []ParamSpec{limitParam, offsetParam, q("query", "query", ParamString, true), q("returnOwnedApps", "return-owned-apps", ParamBool, false)}),
 		endpoint("get-app-details", "GET", "v5/apps/{adamId}", []string{"apps", "get"}, BodyNone, "", "MediaDetailResponse", []ParamSpec{adamIDParam}, nil),
