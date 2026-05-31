@@ -1888,6 +1888,14 @@ func syncSkippedScreenshotOrder(ctx context.Context, client *asc.Client, setID s
 		return err
 	}
 
+	orderedIDs := orderScreenshotIDsForLocalFiles(currentOrder, files, skippedResults, uploadedResults)
+	if sameScreenshotIDOrder(currentOrder, orderedIDs) {
+		return nil
+	}
+	return SetOrderedAppScreenshots(ctx, client, setID, orderedIDs)
+}
+
+func orderScreenshotIDsForLocalFiles(currentOrder []string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) []string {
 	skippedByPath := make(map[string]string, len(skippedResults))
 	for _, item := range skippedResults {
 		if strings.TrimSpace(item.AssetID) == "" {
@@ -1932,10 +1940,7 @@ func syncSkippedScreenshotOrder(ctx context.Context, client *asc.Client, setID s
 		orderedIDs = append(orderedIDs, id)
 	}
 
-	if sameScreenshotIDOrder(currentOrder, orderedIDs) {
-		return nil
-	}
-	return SetOrderedAppScreenshots(ctx, client, setID, orderedIDs)
+	return orderedIDs
 }
 
 func sameScreenshotIDOrder(a, b []string) bool {

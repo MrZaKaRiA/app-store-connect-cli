@@ -249,6 +249,14 @@ func executeAppScreenshotUpload(ctx context.Context, cfg screenshotUploadConfig[
 	result.Total = len(result.Results) + result.Pending
 	finalizeAppScreenshotUploadResult(&result)
 
+	orderedIDs := append([]string(nil), progress.OrderedIDs...)
+	if cfg.SkipExisting && len(prepared.SkippedResults) > 0 {
+		desiredIDs := orderScreenshotIDsForLocalFiles(prepared.OrderedIDs, cfg.Files, prepared.SkippedResults, progress.Results)
+		if len(desiredIDs) > 0 {
+			orderedIDs = desiredIDs
+		}
+	}
+
 	artifact := screenshotUploadFailureArtifact{
 		VersionLocalizationID: cfg.LocalizationID,
 		Path:                  artifactPath,
@@ -257,7 +265,7 @@ func executeAppScreenshotUpload(ctx context.Context, cfg screenshotUploadConfig[
 		SkipExisting:          cfg.SkipExisting,
 		Replace:               cfg.Replace,
 		SetID:                 prepared.Set.ID,
-		OrderedIDs:            append([]string(nil), progress.OrderedIDs...),
+		OrderedIDs:            orderedIDs,
 		PendingFiles:          append([]string(nil), progress.PendingFiles...),
 		Results:               append([]asc.AssetUploadResultItem(nil), result.Results...),
 		Failures:              append([]asc.AssetUploadFailureItem(nil), result.Failures...),
