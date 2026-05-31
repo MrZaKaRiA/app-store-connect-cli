@@ -59,7 +59,7 @@ func TestCollectQueryValidatesEndpointSpecificLimitsAndEnums(t *testing.T) {
 }
 
 func TestCollectPathParamsRequiresDocumentedIdentifiers(t *testing.T) {
-	campaign, _ := appleads.EndpointByCommandPath("campaigns", "get")
+	campaign, _ := appleads.EndpointByCommandPath("campaigns", "view")
 	_, flags := bindEndpointFlags(campaign, "test")
 	if _, err := collectPathParams(campaign, flags); err == nil || !strings.Contains(err.Error(), "--campaign is required") {
 		t.Fatalf("path error = %v, want campaign required", err)

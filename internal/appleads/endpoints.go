@@ -100,27 +100,27 @@ func EndpointSpecs() []EndpointSpec {
 		endpoint("get-me-details", "GET", "v5/me", []string{"me", "view"}, BodyNone, "", "MeDetailResponse", nil, nil),
 
 		endpoint("search-for-ios-apps", "GET", "v5/search/apps", []string{"apps", "search"}, BodyNone, "", "AppInfoListResponse", nil, []ParamSpec{limitParam, offsetParam, q("query", "query", ParamString, true), q("returnOwnedApps", "return-owned-apps", ParamBool, false)}),
-		endpoint("get-app-details", "GET", "v5/apps/{adamId}", []string{"apps", "get"}, BodyNone, "", "MediaDetailResponse", []ParamSpec{adamIDParam}, nil),
+		endpoint("get-app-details", "GET", "v5/apps/{adamId}", []string{"apps", "view"}, BodyNone, "", "MediaDetailResponse", []ParamSpec{adamIDParam}, nil),
 		endpoint("get-localized-app-details", "GET", "v5/apps/{adamId}/locale-details", []string{"apps", "localized-details"}, BodyNone, "", "MediaLocaleDetailResponse", []ParamSpec{adamIDParam}, nil),
 		endpoint("find-app-eligibility-records", "POST", "v5/apps/{adamId}/eligibilities/find", []string{"apps", "eligibility", "find"}, BodyObject, "Selector", "EligibilityRecordListResponse", []ParamSpec{adamIDParam}, nil),
 		endpoint("find-app-assets", "POST", "v5/apps/{adamId}/assets/find", []string{"apps", "assets", "find"}, BodyObject, "Selector", "AppAssetListResponse", []ParamSpec{adamIDParam}, nil),
 
 		endpoint("get-product-pages", "GET", "v5/apps/{adamId}/product-pages", []string{"product-pages", "list"}, BodyNone, "", "ProductPageDetailListResponse", []ParamSpec{adamIDParam}, []ParamSpec{q("name", "name", ParamString, false), qAllowed("states", "states", "HIDDEN", "VISIBLE")}),
-		endpoint("get-product-pages-by-identifier", "GET", "v5/apps/{adamId}/product-pages/{productPageId}", []string{"product-pages", "get"}, BodyNone, "", "ProductPageDetailResponse", []ParamSpec{adamIDParam, productPageParam}, nil),
+		endpoint("get-product-pages-by-identifier", "GET", "v5/apps/{adamId}/product-pages/{productPageId}", []string{"product-pages", "view"}, BodyNone, "", "ProductPageDetailResponse", []ParamSpec{adamIDParam, productPageParam}, nil),
 		endpoint("get-product-page-locales", "GET", "v5/apps/{adamId}/product-pages/{productPageId}/locale-details", []string{"product-pages", "locales", "list"}, BodyNone, "", "ProductPageLocaleDetailListResponse", []ParamSpec{adamIDParam, productPageParam}, []ParamSpec{qAllowed("deviceClasses", "device-classes", "IPAD", "IPHONE"), q("expand", "expand", ParamBool, false), q("languageCodes", "language-codes", ParamString, false), q("languages", "languages", ParamString, false)}),
 		endpoint("get-supported-countries-or-regions", "GET", "v5/countries-or-regions", []string{"product-pages", "countries", "list"}, BodyNone, "", "CountriesOrRegionsListResponse", nil, []ParamSpec{q("countriesOrRegions", "countries-or-regions", ParamString, false)}),
 		endpoint("get-app-preview-device-sizes", "GET", "v5/creativeappmappings/devices", []string{"product-pages", "devices", "list"}, BodyNone, "", "AppPreviewDevicesMappingResponse", nil, nil),
 
 		endpoint("get-all-budget-orders", "GET", "v5/budgetorders", []string{"budget-orders", "list"}, BodyNone, "", "BudgetOrderInfoListResponse", nil, qLimitOffset()),
 		endpoint("create-a-budget-order", "POST", "v5/budgetorders", []string{"budget-orders", "create"}, BodyObject, "BudgetOrderCreate", "BudgetOrderInfoResponse", nil, nil),
-		endpoint("get-a-budget-order", "GET", "v5/budgetorders/{boId}", []string{"budget-orders", "get"}, BodyNone, "", "BudgetOrderInfoResponse", []ParamSpec{budgetOrderParam}, nil),
+		endpoint("get-a-budget-order", "GET", "v5/budgetorders/{boId}", []string{"budget-orders", "view"}, BodyNone, "", "BudgetOrderInfoResponse", []ParamSpec{budgetOrderParam}, nil),
 		endpoint("update-a-budget-order", "PUT", "v5/budgetorders/{boId}", []string{"budget-orders", "update"}, BodyObject, "BudgetOrderUpdate", "BudgetOrderInfoResponse", []ParamSpec{budgetOrderParam}, nil),
 
 		endpoint("get-all-campaigns", "GET", "v5/campaigns", []string{"campaigns", "list"}, BodyNone, "", "CampaignListResponse", nil, qLimitOffset()),
 		endpoint("create-a-campaign", "POST", "v5/campaigns", []string{"campaigns", "create"}, BodyObject, "Campaign", "CampaignResponse", nil, nil),
 		endpoint("find-campaigns", "POST", "v5/campaigns/find", []string{"campaigns", "find"}, BodyObject, "Selector", "CampaignListResponse", nil, nil),
 		endpoint("delete-a-campaign", "DELETE", "v5/campaigns/{campaignId}", []string{"campaigns", "delete"}, BodyNone, "", "VoidResponse", []ParamSpec{campaignParam}, nil),
-		endpoint("get-a-campaign", "GET", "v5/campaigns/{campaignId}", []string{"campaigns", "get"}, BodyNone, "", "CampaignResponse", []ParamSpec{campaignParam}, nil),
+		endpoint("get-a-campaign", "GET", "v5/campaigns/{campaignId}", []string{"campaigns", "view"}, BodyNone, "", "CampaignResponse", []ParamSpec{campaignParam}, nil),
 		endpoint("update-a-campaign", "PUT", "v5/campaigns/{campaignId}", []string{"campaigns", "update"}, BodyObject, "UpdateCampaignRequest", "CampaignResponse", []ParamSpec{campaignParam}, nil),
 
 		endpoint("get-all-ad-groups", "GET", "v5/campaigns/{campaignId}/adgroups", []string{"ad-groups", "list"}, BodyNone, "", "AdGroupListResponse", []ParamSpec{campaignParam}, qLimitOffset()),
@@ -128,20 +128,20 @@ func EndpointSpecs() []EndpointSpec {
 		endpoint("find-ad-groups", "POST", "v5/campaigns/{campaignId}/adgroups/find", []string{"ad-groups", "find"}, BodyObject, "Selector", "AdGroupListResponse", []ParamSpec{campaignParam}, nil),
 		endpoint("find-ad-groups-org", "POST", "v5/adgroups/find", []string{"ad-groups", "find-org"}, BodyObject, "Selector", "AdGroupListResponse", nil, nil),
 		endpoint("delete-an-ad-group", "DELETE", "v5/campaigns/{campaignId}/adgroups/{adgroupId}", []string{"ad-groups", "delete"}, BodyNone, "", "VoidResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
-		endpoint("get-an-ad-group", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}", []string{"ad-groups", "get"}, BodyNone, "", "AdGroupResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
+		endpoint("get-an-ad-group", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}", []string{"ad-groups", "view"}, BodyNone, "", "AdGroupResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("update-an-ad-group", "PUT", "v5/campaigns/{campaignId}/adgroups/{adgroupId}", []string{"ad-groups", "update"}, BodyObject, "AdGroupUpdate", "AdGroupResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 
 		endpoint("get-all-ads", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads", []string{"ads", "list"}, BodyNone, "", "AdListResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("create-an-ad", "POST", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads", []string{"ads", "create"}, BodyObject, "AdCreate", "AdResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("delete-an-ad", "DELETE", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads/{adId}", []string{"ads", "delete"}, BodyNone, "", "VoidResponse", []ParamSpec{campaignParam, adGroupParam, adParam}, nil),
-		endpoint("get-an-ad", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads/{adId}", []string{"ads", "get"}, BodyNone, "", "AdResponse", []ParamSpec{campaignParam, adGroupParam, adParam}, nil),
+		endpoint("get-an-ad", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads/{adId}", []string{"ads", "view"}, BodyNone, "", "AdResponse", []ParamSpec{campaignParam, adGroupParam, adParam}, nil),
 		endpoint("update-an-ad", "PUT", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/ads/{adId}", []string{"ads", "update"}, BodyObject, "AdUpdate", "AdResponse", []ParamSpec{campaignParam, adGroupParam, adParam}, nil),
 		endpoint("find-ads", "POST", "v5/campaigns/{campaignId}/ads/find", []string{"ads", "find"}, BodyObject, "Selector", "AdListResponse", []ParamSpec{campaignParam}, nil),
 		endpoint("find-ads-org", "POST", "v5/ads/find", []string{"ads", "find-org"}, BodyObject, "Selector", "AdListResponse", nil, nil),
 
 		endpoint("get-all-targeting-keywords-in-an-ad-group", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords", []string{"targeting-keywords", "list"}, BodyNone, "", "KeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, qLimitOffset()),
 		endpoint("find-targeting-keywords-in-a-campaign", "POST", "v5/campaigns/{campaignId}/adgroups/targetingkeywords/find", []string{"targeting-keywords", "find"}, BodyObject, "Selector", "KeywordListResponse", []ParamSpec{campaignParam}, nil),
-		endpoint("get-a-targeting-keyword-in-an-ad-group", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords/{keywordId}", []string{"targeting-keywords", "get"}, BodyNone, "", "KeywordResponse", []ParamSpec{campaignParam, adGroupParam, keywordParam}, nil),
+		endpoint("get-a-targeting-keyword-in-an-ad-group", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords/{keywordId}", []string{"targeting-keywords", "view"}, BodyNone, "", "KeywordResponse", []ParamSpec{campaignParam, adGroupParam, keywordParam}, nil),
 		endpoint("create-targeting-keywords", "POST", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords/bulk", []string{"targeting-keywords", "create-bulk"}, BodyArray, "[Keyword]", "KeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("update-targeting-keywords", "PUT", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords/bulk", []string{"targeting-keywords", "update-bulk"}, BodyArray, "[KeywordUpdateRequest]", "KeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("delete-a-targeting-keyword", "DELETE", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/targetingkeywords/{keywordId}", []string{"targeting-keywords", "delete"}, BodyNone, "", "VoidResponse", []ParamSpec{campaignParam, adGroupParam, keywordParam}, nil),
@@ -149,14 +149,14 @@ func EndpointSpecs() []EndpointSpec {
 
 		endpoint("get-all-campaign-negative-keywords", "GET", "v5/campaigns/{campaignId}/negativekeywords", []string{"campaign-negative-keywords", "list"}, BodyNone, "", "NegativeKeywordListResponse", []ParamSpec{campaignParam}, qLimitOffset()),
 		endpoint("find-campaign-negative-keywords", "POST", "v5/campaigns/{campaignId}/negativekeywords/find", []string{"campaign-negative-keywords", "find"}, BodyObject, "Selector", "NegativeKeywordListResponse", []ParamSpec{campaignParam}, nil),
-		endpoint("get-a-campaign-negative-keyword", "GET", "v5/campaigns/{campaignId}/negativekeywords/{keywordId}", []string{"campaign-negative-keywords", "get"}, BodyNone, "", "NegativeKeywordResponse", []ParamSpec{campaignParam, keywordParam}, nil),
+		endpoint("get-a-campaign-negative-keyword", "GET", "v5/campaigns/{campaignId}/negativekeywords/{keywordId}", []string{"campaign-negative-keywords", "view"}, BodyNone, "", "NegativeKeywordResponse", []ParamSpec{campaignParam, keywordParam}, nil),
 		endpoint("create-campaign-negative-keywords", "POST", "v5/campaigns/{campaignId}/negativekeywords/bulk", []string{"campaign-negative-keywords", "create-bulk"}, BodyArray, "[NegativeKeyword]", "NegativeKeywordListResponse", []ParamSpec{campaignParam}, nil),
 		endpoint("update-campaign-negative-keywords", "PUT", "v5/campaigns/{campaignId}/negativekeywords/bulk", []string{"campaign-negative-keywords", "update-bulk"}, BodyArray, "[NegativeKeyword]", "NegativeKeywordListResponse", []ParamSpec{campaignParam}, nil),
 		endpoint("delete-campaign-negative-keywords", "POST", "v5/campaigns/{campaignId}/negativekeywords/delete/bulk", []string{"campaign-negative-keywords", "delete-bulk"}, BodyArray, "[int64]", "IntegerResponse", []ParamSpec{campaignParam}, nil),
 
 		endpoint("get-all-ad-group-negative-keywords", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords", []string{"ad-group-negative-keywords", "list"}, BodyNone, "", "NegativeKeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, qLimitOffset()),
 		endpoint("find-ad-group-negative-keywords", "POST", "v5/campaigns/{campaignId}/adgroups/negativekeywords/find", []string{"ad-group-negative-keywords", "find"}, BodyObject, "Selector", "NegativeKeywordListResponse", []ParamSpec{campaignParam}, nil),
-		endpoint("get-an-ad-group-negative-keyword", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords/{keywordId}", []string{"ad-group-negative-keywords", "get"}, BodyNone, "", "NegativeKeywordResponse", []ParamSpec{campaignParam, adGroupParam, keywordParam}, nil),
+		endpoint("get-an-ad-group-negative-keyword", "GET", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords/{keywordId}", []string{"ad-group-negative-keywords", "view"}, BodyNone, "", "NegativeKeywordResponse", []ParamSpec{campaignParam, adGroupParam, keywordParam}, nil),
 		endpoint("create-ad-group-negative-keywords", "POST", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords/bulk", []string{"ad-group-negative-keywords", "create-bulk"}, BodyArray, "[NegativeKeyword]", "NegativeKeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("update-ad-group-negative-keywords", "PUT", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords/bulk", []string{"ad-group-negative-keywords", "update-bulk"}, BodyArray, "[NegativeKeyword]", "NegativeKeywordListResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
 		endpoint("delete-ad-group-negative-keywords", "POST", "v5/campaigns/{campaignId}/adgroups/{adgroupId}/negativekeywords/delete/bulk", []string{"ad-group-negative-keywords", "delete-bulk"}, BodyArray, "[int64]", "IntegerResponse", []ParamSpec{campaignParam, adGroupParam}, nil),
@@ -167,10 +167,10 @@ func EndpointSpecs() []EndpointSpec {
 		endpoint("get-all-creatives", "GET", "v5/creatives", []string{"creatives", "list"}, BodyNone, "", "CreativeListResponse", nil, qLimitOffset()),
 		endpoint("create-a-creative", "POST", "v5/creatives", []string{"creatives", "create"}, BodyObject, "(CustomProductPageCreative | DefaultProductPageCreative)", "CreativeResponse", nil, nil),
 		endpoint("find-creatives", "POST", "v5/creatives/find", []string{"creatives", "find"}, BodyObject, "Selector", "CreativeListResponse", nil, nil),
-		endpoint("get-a-creative", "GET", "v5/creatives/{creativeId}", []string{"creatives", "get"}, BodyNone, "", "CreativeResponse", []ParamSpec{creativeParam}, []ParamSpec{q("includeDeletedCreativeSetAssets", "include-deleted-creative-set-assets", ParamBool, false)}),
+		endpoint("get-a-creative", "GET", "v5/creatives/{creativeId}", []string{"creatives", "view"}, BodyNone, "", "CreativeResponse", []ParamSpec{creativeParam}, []ParamSpec{q("includeDeletedCreativeSetAssets", "include-deleted-creative-set-assets", ParamBool, false)}),
 
 		endpoint("find-ad-creative-rejection-reasons", "POST", "v5/product-page-reasons/find", []string{"rejection-reasons", "find"}, BodyObject, "Selector", "ProductPageReasonListResponse", nil, nil),
-		endpoint("gets-a-product-page-reason", "GET", "v5/product-page-reasons/{productPageReasonId}", []string{"rejection-reasons", "get"}, BodyNone, "", "ProductPageReasonResponse", []ParamSpec{reasonParam}, nil),
+		endpoint("gets-a-product-page-reason", "GET", "v5/product-page-reasons/{productPageReasonId}", []string{"rejection-reasons", "view"}, BodyNone, "", "ProductPageReasonResponse", []ParamSpec{reasonParam}, nil),
 
 		endpoint("get-campaign-level-reports", "POST", "v5/reports/campaigns", []string{"reports", "campaigns"}, BodyObject, "ReportingRequest", "ReportingResponseBody", nil, nil),
 		endpoint("get-ad-group-level-reports", "POST", "v5/reports/campaigns/{campaignId}/adgroups", []string{"reports", "ad-groups"}, BodyObject, "ReportingRequest", "ReportingResponseBody", []ParamSpec{campaignParam}, nil),
@@ -182,7 +182,7 @@ func EndpointSpecs() []EndpointSpec {
 
 		endpoint("get-all-impression-share-reports", "GET", "v5/custom-reports", []string{"impression-share-reports", "list"}, BodyNone, "", "CustomReportResponseBody", nil, []ParamSpec{q("field", "field", ParamString, false), {Name: "limit", Flag: "limit", Type: ParamInt, Max: 50}, offsetParam, q("sortOrder", "sort-order", ParamString, false)}),
 		endpoint("impression-share-report", "POST", "v5/custom-reports", []string{"impression-share-reports", "create"}, BodyObject, "CustomReportRequest", "CustomReportResponseBody", nil, nil),
-		endpoint("get-a-single-impression-share-report", "GET", "v5/custom-reports/{reportId}", []string{"impression-share-reports", "get"}, BodyNone, "", "CustomReportResponseBody", []ParamSpec{reportParam}, nil),
+		endpoint("get-a-single-impression-share-report", "GET", "v5/custom-reports/{reportId}", []string{"impression-share-reports", "view"}, BodyNone, "", "CustomReportResponseBody", []ParamSpec{reportParam}, nil),
 	}
 
 	for i := range specs {

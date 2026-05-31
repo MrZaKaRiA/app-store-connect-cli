@@ -158,6 +158,20 @@ func TestBypassKeychainRemovalSkipsKeychain(t *testing.T) {
 	}
 }
 
+func TestRemoveCredentialsReturnsNotFoundWhenProfileMissing(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")
+	if err := StoreCredentialsConfigAt("ads", testAdsCredentials(), configPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt() error: %v", err)
+	}
+
+	err := RemoveCredentials("missing")
+	if !errors.Is(err, keyring.ErrKeyNotFound) {
+		t.Fatalf("RemoveCredentials() error = %v, want key not found", err)
+	}
+}
+
 func TestBypassKeychainRemoveAllSkipsKeychain(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("ASC_CONFIG_PATH", configPath)

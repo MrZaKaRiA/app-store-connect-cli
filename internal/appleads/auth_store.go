@@ -181,16 +181,26 @@ func RemoveCredentials(name string) error {
 	if name == "" {
 		return fmt.Errorf("credential name is required")
 	}
+	removed := false
 	var keychainErr error
 	if !ShouldBypassKeychain() {
 		keychainErr = removeFromKeychain(name)
+		if keychainErr == nil {
+			removed = true
+		}
 	}
 	configErr := removeFromConfigIfPresent(name)
+	if configErr == nil {
+		removed = true
+	}
 	if keychainErr != nil && !isKeyringUnavailable(keychainErr) && !errors.Is(keychainErr, keyring.ErrKeyNotFound) {
 		return keychainErr
 	}
 	if configErr != nil && !errors.Is(configErr, config.ErrNotFound) && !errors.Is(configErr, keyring.ErrKeyNotFound) {
 		return configErr
+	}
+	if !removed {
+		return keyring.ErrKeyNotFound
 	}
 	return clearDefaultNameIf(name)
 }

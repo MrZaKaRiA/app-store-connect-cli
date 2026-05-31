@@ -184,9 +184,9 @@ func TestRequestParsesAppleAdsErrorEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() error: %v", err)
 	}
-	campaigns, ok := EndpointByCommandPath("campaigns", "get")
+	campaigns, ok := EndpointByCommandPath("campaigns", "view")
 	if !ok {
-		t.Fatal("missing campaigns get endpoint")
+		t.Fatal("missing campaigns view endpoint")
 	}
 	_, err = client.Do(context.Background(), campaigns, map[string]string{"campaignId": "1"}, nil, nil)
 	if err == nil {
