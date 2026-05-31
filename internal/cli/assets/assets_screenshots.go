@@ -1828,6 +1828,12 @@ func uploadScreenshotsWithConfig[T any](ctx context.Context, cfg screenshotUploa
 		}
 		results = append(results, uploadedResults...)
 	}
+	if cfg.SkipExisting && len(skippedResults) > 0 {
+		if _, err := syncSkippedScreenshotOrder(uploadCtx, cfg.Client, set.ID, cfg.Files, skippedResults, results); err != nil {
+			results = append(skippedResults, results...)
+			return cfg.BuildResult(cfg.LocalizationID, set, false, results), err
+		}
+	}
 	results = append(skippedResults, results...)
 
 	return cfg.BuildResult(cfg.LocalizationID, set, false, results), nil
@@ -1843,13 +1849,15 @@ func deleteExistingScreenshots(ctx context.Context, client *asc.Client, screensh
 }
 
 func filterExistingScreenshotFiles(files []string, screenshots []asc.Resource[asc.AppScreenshotAttributes]) ([]string, []asc.AssetUploadResultItem, error) {
-	existingChecksums := make(map[string]struct{}, len(screenshots))
+	existingByChecksum := make(map[string]asc.Resource[asc.AppScreenshotAttributes], len(screenshots))
 	for _, screenshot := range screenshots {
 		checksum := strings.TrimSpace(screenshot.Attributes.SourceFileChecksum)
 		if checksum == "" {
 			continue
 		}
-		existingChecksums[checksum] = struct{}{}
+		if _, exists := existingByChecksum[checksum]; !exists {
+			existingByChecksum[checksum] = screenshot
+		}
 	}
 
 	filtered := make([]string, 0, len(files))
@@ -1859,10 +1867,11 @@ func filterExistingScreenshotFiles(files []string, screenshots []asc.Resource[as
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, exists := existingChecksums[checksum]; exists {
+		if existing, exists := existingByChecksum[checksum]; exists {
 			skipped = append(skipped, asc.AssetUploadResultItem{
 				FileName: filepath.Base(filePath),
 				FilePath: filePath,
+				AssetID:  existing.ID,
 				State:    "skipped",
 				Skipped:  true,
 			})
@@ -1872,6 +1881,81 @@ func filterExistingScreenshotFiles(files []string, screenshots []asc.Resource[as
 	}
 
 	return filtered, skipped, nil
+}
+
+func syncSkippedScreenshotOrder(ctx context.Context, client *asc.Client, setID string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) ([]string, error) {
+	currentOrder, err := GetOrderedAppScreenshotIDs(ctx, client, setID)
+	if err != nil {
+		return nil, err
+	}
+
+	orderedIDs := orderScreenshotIDsForLocalFiles(currentOrder, files, skippedResults, uploadedResults)
+	if sameScreenshotIDOrder(currentOrder, orderedIDs) {
+		return orderedIDs, nil
+	}
+	return orderedIDs, SetOrderedAppScreenshots(ctx, client, setID, orderedIDs)
+}
+
+func orderScreenshotIDsForLocalFiles(currentOrder []string, files []string, skippedResults, uploadedResults []asc.AssetUploadResultItem) []string {
+	skippedByPath := make(map[string]string, len(skippedResults))
+	for _, item := range skippedResults {
+		if strings.TrimSpace(item.AssetID) == "" {
+			continue
+		}
+		skippedByPath[item.FilePath] = item.AssetID
+	}
+	uploadedByPath := make(map[string]string, len(uploadedResults))
+	for _, item := range uploadedResults {
+		if strings.TrimSpace(item.AssetID) == "" {
+			continue
+		}
+		uploadedByPath[item.FilePath] = item.AssetID
+	}
+
+	orderedIDs := make([]string, 0, len(currentOrder)+len(uploadedResults))
+	seen := make(map[string]struct{}, len(currentOrder)+len(uploadedResults))
+	for _, filePath := range files {
+		id := skippedByPath[filePath]
+		if id == "" {
+			id = uploadedByPath[filePath]
+		}
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		orderedIDs = append(orderedIDs, id)
+	}
+	for _, id := range currentOrder {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		orderedIDs = append(orderedIDs, id)
+	}
+
+	return orderedIDs
+}
+
+func sameScreenshotIDOrder(a, b []string) bool {
+	a = normalizeScreenshotIDs(a)
+	b = normalizeScreenshotIDs(b)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func computeFileChecksum(filePath string) (string, error) {
