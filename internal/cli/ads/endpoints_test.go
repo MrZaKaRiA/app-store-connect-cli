@@ -43,7 +43,15 @@ func TestAdsCommandRegistersEveryEndpointSpec(t *testing.T) {
 
 func TestCollectQueryValidatesEndpointSpecificLimitsAndEnums(t *testing.T) {
 	customReports, _ := appleads.EndpointByCommandPath("impression-share-reports", "list")
-	_, flags := bindEndpointFlags(customReports, "test")
+	fs, flags := bindEndpointFlags(customReports, "test")
+	if err := fs.Parse([]string{"--limit", "0"}); err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if _, err := collectQuery(customReports, flags); err == nil || !strings.Contains(err.Error(), "--limit must be between 1 and 50") {
+		t.Fatalf("custom reports explicit zero limit error = %v, want min 1 error", err)
+	}
+
+	_, flags = bindEndpointFlags(customReports, "test")
 	*flags.queryInts["limit"] = 51
 	if _, err := collectQuery(customReports, flags); err == nil || !strings.Contains(err.Error(), "--limit must be between 1 and 50") {
 		t.Fatalf("custom reports limit error = %v, want max 50 error", err)

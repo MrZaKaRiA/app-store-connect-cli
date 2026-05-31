@@ -18,8 +18,9 @@ import (
 )
 
 type endpointFlagValues struct {
-	common commonFlags
-	output shared.OutputFlags
+	common  commonFlags
+	output  shared.OutputFlags
+	flagSet *flag.FlagSet
 
 	file     *string
 	confirm  *bool
@@ -185,6 +186,7 @@ func bindEndpointFlags(spec appleads.EndpointSpec, flagSetName string) (*flag.Fl
 			AdsProfile: fs.String("ads-profile", "", "Use named Apple Ads authentication profile"),
 		},
 		output:       shared.BindOutputFlags(fs),
+		flagSet:      fs,
 		pathStrings:  map[string]*string{},
 		queryStrings: map[string]*string{},
 		queryInts:    map[string]*int{},
@@ -297,9 +299,13 @@ func collectQuery(spec appleads.EndpointSpec, flags endpointFlagValues) (url.Val
 		switch param.Type {
 		case appleads.ParamInt:
 			raw := intValue(flags.queryInts[param.Name])
+			provided := flagProvided(flags.flagSet, param.Flag)
 			if raw == 0 {
 				if param.Required {
 					return nil, fmt.Errorf("--%s is required", param.Flag)
+				}
+				if provided && param.Name == "limit" {
+					return nil, fmt.Errorf("--limit must be between 1 and %d", appleads.MaxPageLimit(spec))
 				}
 				continue
 			}
@@ -332,6 +338,19 @@ func collectQuery(spec appleads.EndpointSpec, flags endpointFlagValues) (url.Val
 		}
 	}
 	return query, nil
+}
+
+func flagProvided(fs *flag.FlagSet, name string) bool {
+	if fs == nil {
+		return false
+	}
+	provided := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			provided = true
+		}
+	})
+	return provided
 }
 
 func validateAllowed(param appleads.ParamSpec, raw string) error {
