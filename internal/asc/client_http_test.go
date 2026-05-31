@@ -6183,6 +6183,85 @@ func TestGetBundleIDs_WithIdentifierFilter(t *testing.T) {
 	}
 }
 
+func TestGetBundleIDs_SplitsLongIdentifierFilter(t *testing.T) {
+	identifiers := make([]string, 0, 1500)
+	for range 1500 {
+		identifiers = append(identifiers, "a")
+	}
+	rawIdentifierFilter := strings.Join(identifiers, ",")
+	if len(rawIdentifierFilter) > bundleIDsIdentifierFilterMaxLength {
+		t.Fatalf("test setup expected raw filter length <= %d, got %d", bundleIDsIdentifierFilterMaxLength, len(rawIdentifierFilter))
+	}
+
+	requests := 0
+	client := newTestClient(
+		t, func(req *http.Request) {
+			requests++
+			if req.Method != http.MethodGet {
+				t.Fatalf("expected GET, got %s", req.Method)
+			}
+			if req.URL.Path != "/v1/bundleIds" {
+				t.Fatalf("expected path /v1/bundleIds, got %s", req.URL.Path)
+			}
+			if requests == 2 {
+				if req.URL.Query().Get("cursor") != "chunk-one-next" {
+					t.Fatalf("expected next page cursor, got query %q", req.URL.RawQuery)
+				}
+				assertAuthorized(t, req)
+				return
+			}
+			filter := req.URL.Query().Get("filter[identifier]")
+			if filter == "" {
+				t.Fatal("expected filter[identifier]")
+			}
+			if len(req.URL.RequestURI()) > bundleIDsIdentifierFilterMaxLength {
+				t.Fatalf("expected encoded request URI to be chunked below %d chars, got %d", bundleIDsIdentifierFilterMaxLength, len(req.URL.RequestURI()))
+			}
+			assertAuthorized(t, req)
+		},
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-1","attributes":{"identifier":"com.example.one"}}],"links":{"next":"https://api.appstoreconnect.apple.com/v1/bundleIds?cursor=chunk-one-next"}}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-2","attributes":{"identifier":"com.example.one.more"}}]}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-3","attributes":{"identifier":"com.example.two"}}]}`),
+	)
+
+	resp, err := client.GetBundleIDs(context.Background(), WithBundleIDsFilterIdentifier(rawIdentifierFilter))
+	if err != nil {
+		t.Fatalf("GetBundleIDs() error: %v", err)
+	}
+	if requests != 3 {
+		t.Fatalf("expected split requests to paginate each chunk, got %d", requests)
+	}
+	if len(resp.Data) != 3 {
+		t.Fatalf("expected aggregated bundle IDs from split requests, got %d", len(resp.Data))
+	}
+}
+
+func TestGetBundleIDs_SplitIdentifierFilterRejectsRepeatedNextURL(t *testing.T) {
+	identifiers := make([]string, 0, 1500)
+	for range 1500 {
+		identifiers = append(identifiers, "a")
+	}
+	nextURL := "https://api.appstoreconnect.apple.com/v1/bundleIds?cursor=repeat"
+
+	requests := 0
+	client := newTestClient(
+		t, func(req *http.Request) {
+			requests++
+			assertAuthorized(t, req)
+		},
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-1","attributes":{"identifier":"com.example.one"}}],"links":{"next":"`+nextURL+`"}}`),
+		jsonResponse(http.StatusOK, `{"data":[{"type":"bundleIds","id":"bid-2","attributes":{"identifier":"com.example.two"}}],"links":{"next":"`+nextURL+`"}}`),
+	)
+
+	_, err := client.GetBundleIDs(context.Background(), WithBundleIDsFilterIdentifier(strings.Join(identifiers, ",")))
+	if !errors.Is(err, ErrRepeatedPaginationURL) {
+		t.Fatalf("expected ErrRepeatedPaginationURL, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("expected repeated next URL to stop after two requests, got %d", requests)
+	}
+}
+
 func TestGetInAppPurchasesV2_WithLimit(t *testing.T) {
 	response := jsonResponse(http.StatusOK, `{"data":[{"type":"inAppPurchases","id":"iap-1","attributes":{"name":"Pro","productId":"com.example.pro","inAppPurchaseType":"CONSUMABLE"}}]}`)
 	client := newTestClient(t, func(req *http.Request) {
