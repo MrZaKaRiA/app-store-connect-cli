@@ -57,7 +57,13 @@ type webBundleIDResponse struct {
 			Identifier string `json:"identifier"`
 			SeedID     string `json:"seedId,omitempty"`
 		} `json:"attributes"`
+		Relationships struct {
+			BundleIDCapabilities struct {
+				Data []webBundleIDCapabilityRelationship `json:"data"`
+			} `json:"bundleIdCapabilities"`
+		} `json:"relationships"`
 	} `json:"data"`
+	Included []webBundleIDCapabilityRelationship `json:"included,omitempty"`
 }
 
 type webBundleIDPatchRequest struct {
@@ -74,16 +80,21 @@ type webBundleIDPatchRequest struct {
 }
 
 type webBundleIDCapabilityRelationship struct {
-	Type          string `json:"type"`
-	Attributes    any    `json:"attributes"`
-	Relationships struct {
-		Capability struct {
-			Data relationshipData `json:"data"`
-		} `json:"capability"`
-		ParentBundleID struct {
-			Data relationshipData `json:"data"`
-		} `json:"parentBundleId"`
-	} `json:"relationships"`
+	ID            string                                 `json:"id,omitempty"`
+	Type          string                                 `json:"type"`
+	Attributes    any                                    `json:"attributes,omitempty"`
+	Relationships map[string]webBundleIDRelationshipData `json:"relationships,omitempty"`
+}
+
+type webBundleIDRelationshipData struct {
+	Data relationshipData `json:"data"`
+}
+
+func (r webBundleIDCapabilityRelationship) capabilityID() string {
+	if r.Relationships == nil {
+		return ""
+	}
+	return strings.ToUpper(strings.TrimSpace(r.Relationships["capability"].Data.ID))
 }
 
 func normalizeAppClipBundleIDCapabilitySyncRequest(req AppClipBundleIDCapabilitySyncRequest) (AppClipBundleIDCapabilitySyncRequest, error) {
@@ -155,9 +166,57 @@ func buildAppClipBundleIDCapabilityPatchRequest(current webBundleIDResponse, req
 			Enabled:  req.Enabled,
 			Settings: req.Settings,
 		},
+		Relationships: map[string]webBundleIDRelationshipData{
+			"capability": {
+				Data: relationshipData{Type: "capabilities", ID: req.Capability},
+			},
+			"parentBundleId": {
+				Data: relationshipData{Type: "bundleIds", ID: req.ParentBundleID},
+			},
+		},
 	}
-	capability.Relationships.Capability.Data = relationshipData{Type: "capabilities", ID: req.Capability}
-	capability.Relationships.ParentBundleID.Data = relationshipData{Type: "bundleIds", ID: req.ParentBundleID}
-	payload.Data.Relationships.BundleIDCapabilities.Data = []webBundleIDCapabilityRelationship{capability}
+	payload.Data.Relationships.BundleIDCapabilities.Data = appendPreservedBundleIDCapabilities(currentBundleIDCapabilities(current), capability)
 	return payload
+}
+
+func currentBundleIDCapabilities(current webBundleIDResponse) []webBundleIDCapabilityRelationship {
+	capabilities := make([]webBundleIDCapabilityRelationship, 0, len(current.Included)+len(current.Data.Relationships.BundleIDCapabilities.Data))
+	seen := make(map[string]struct{})
+	for _, capability := range current.Included {
+		if capability.Type != "bundleIdCapabilities" {
+			continue
+		}
+		capabilities = append(capabilities, capability)
+		if capability.ID != "" {
+			seen[capability.ID] = struct{}{}
+		}
+	}
+	for _, capability := range current.Data.Relationships.BundleIDCapabilities.Data {
+		if capability.Type != "bundleIdCapabilities" {
+			continue
+		}
+		if capability.ID != "" {
+			if _, ok := seen[capability.ID]; ok {
+				continue
+			}
+			seen[capability.ID] = struct{}{}
+		}
+		capabilities = append(capabilities, capability)
+	}
+	return capabilities
+}
+
+func appendPreservedBundleIDCapabilities(existing []webBundleIDCapabilityRelationship, synced webBundleIDCapabilityRelationship) []webBundleIDCapabilityRelationship {
+	capabilityID := synced.capabilityID()
+	capabilities := make([]webBundleIDCapabilityRelationship, 0, len(existing)+1)
+	for _, capability := range existing {
+		if capability.capabilityID() == capabilityID {
+			if synced.ID == "" {
+				synced.ID = capability.ID
+			}
+			continue
+		}
+		capabilities = append(capabilities, capability)
+	}
+	return append(capabilities, synced)
 }
