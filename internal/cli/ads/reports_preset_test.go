@@ -93,8 +93,8 @@ func TestBuildReportPresetPayloadRejectsLastDaysWithORTZ(t *testing.T) {
 	}
 }
 
-func TestBuildReportPresetPayloadRequiresORTZForSearchTerms(t *testing.T) {
-	_, err := buildReportPresetPayload(reportPresetTestFlags(
+func TestBuildReportPresetPayloadAllowsUTCForSearchTerms(t *testing.T) {
+	payload, err := buildReportPresetPayload(reportPresetTestFlags(
 		"search-terms",
 		"12345",
 		"2026-05-01",
@@ -102,8 +102,11 @@ func TestBuildReportPresetPayloadRequiresORTZForSearchTerms(t *testing.T) {
 		0,
 		"UTC",
 	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
-	if err == nil || !strings.Contains(err.Error(), "--time-zone must be ORTZ for search-term report levels") {
-		t.Fatalf("error = %v, want search-term time-zone validation", err)
+	if err != nil {
+		t.Fatalf("buildReportPresetPayload() error: %v", err)
+	}
+	if payload.TimeZone != "UTC" {
+		t.Fatalf("timeZone = %q, want UTC", payload.TimeZone)
 	}
 }
 
@@ -152,8 +155,8 @@ func TestBuildReportPresetPayloadRejectsHourlyWhereUnsupported(t *testing.T) {
 		timeZone string
 		sort     string
 	}{
-		{level: "search-terms", timeZone: "ORTZ"},
-		{level: "ad-group-search-terms", timeZone: "ORTZ"},
+		{level: "search-terms", timeZone: "UTC"},
+		{level: "ad-group-search-terms", timeZone: "UTC"},
 		{level: "ads", timeZone: "UTC", sort: "impressions:desc"},
 	} {
 		t.Run(tt.level, func(t *testing.T) {
@@ -184,7 +187,7 @@ func TestBuildReportPresetPayloadRejectsRowTotalsForSearchTerms(t *testing.T) {
 		"2026-05-01",
 		"2026-05-31",
 		0,
-		"ORTZ",
+		"UTC",
 	)
 	returnRowTotals := true
 	flags.returnRowTotals = &returnRowTotals

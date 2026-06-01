@@ -303,7 +303,7 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 		},
 		{
 			name:    "hourly unsupported for search terms",
-			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--time-zone", "ORTZ", "--granularity", "HOURLY", "--output", "json"},
+			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--granularity", "HOURLY", "--output", "json"},
 			wantErr: "--granularity HOURLY is only supported",
 		},
 		{
@@ -313,7 +313,7 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 		},
 		{
 			name:    "row totals unsupported for search terms",
-			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--time-zone", "ORTZ", "--return-row-totals", "--output", "json"},
+			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--return-row-totals", "--output", "json"},
 			wantErr: "--return-row-totals cannot be used with search-term report levels",
 		},
 		{
@@ -325,11 +325,6 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 			name:    "last days require UTC",
 			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--last-days", "1", "--time-zone", "ORTZ", "--output", "json"},
 			wantErr: "--last-days requires --time-zone UTC",
-		},
-		{
-			name:    "search terms require ORTZ",
-			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--time-zone", "UTC", "--output", "json"},
-			wantErr: "--time-zone must be ORTZ for search-term report levels",
 		},
 		{
 			name:    "ad level requires sort",

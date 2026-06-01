@@ -200,7 +200,7 @@ func reportPresetPathParams(spec appleads.EndpointSpec, flags adsReportPresetFla
 
 func buildReportPresetPayload(flags adsReportPresetFlags, now time.Time) (adsReportPresetPayload, error) {
 	level := strings.TrimSpace(*flags.level)
-	reportingTimeZone, err := normalizeReportPresetTimeZone(*flags.timeZone, level)
+	reportingTimeZone, err := normalizeReportPresetTimeZone(*flags.timeZone)
 	if err != nil {
 		return adsReportPresetPayload{}, err
 	}
@@ -297,16 +297,13 @@ func reportPresetDateRange(from, to string, lastDays int, now time.Time, reporti
 	return from, to, nil
 }
 
-func normalizeReportPresetTimeZone(value string, level string) (string, error) {
+func normalizeReportPresetTimeZone(value string) (string, error) {
 	normalized := strings.ToUpper(strings.TrimSpace(value))
 	if normalized == "" {
 		normalized = "UTC"
 	}
 	if !slices.Contains([]string{"UTC", "ORTZ"}, normalized) {
 		return "", fmt.Errorf("--time-zone must be UTC or ORTZ")
-	}
-	if isSearchTermReportLevel(level) && normalized != "ORTZ" {
-		return "", fmt.Errorf("--time-zone must be ORTZ for search-term report levels")
 	}
 	return normalized, nil
 }
