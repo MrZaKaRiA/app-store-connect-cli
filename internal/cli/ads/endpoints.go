@@ -119,7 +119,7 @@ func sortedChildNames(node *commandNode) []string {
 
 func endpointShortHelp(node *commandNode) string {
 	if node.spec == nil {
-		return "Manage Apple Ads " + strings.ReplaceAll(node.name, "-", " ") + "."
+		return endpointGroupHelp(node.name)
 	}
 	if len(node.children) > 0 {
 		return "Manage Apple Ads " + strings.ReplaceAll(node.name, "-", " ") + "."
@@ -129,7 +129,7 @@ func endpointShortHelp(node *commandNode) string {
 
 func endpointLongHelp(node *commandNode, path []string) string {
 	if node.spec == nil {
-		return fmt.Sprintf("Manage Apple Ads %s.\n\nExamples:\n  asc ads %s --help", strings.ReplaceAll(node.name, "-", " "), strings.Join(path, " "))
+		return fmt.Sprintf("%s\n\nExamples:\n  asc ads %s --help", endpointGroupHelp(node.name), strings.Join(path, " "))
 	}
 	examples := []string{"  asc ads " + strings.Join(path, " ")}
 	for _, param := range node.spec.PathParams {
@@ -147,7 +147,24 @@ func endpointLongHelp(node *commandNode, path []string) string {
 	return fmt.Sprintf("%s\n\nEndpoint: %s %s\n\nExamples:\n%s", endpointShortHelp(node), node.spec.Method, node.spec.Path, strings.Join(examples, "\n"))
 }
 
+func endpointGroupHelp(name string) string {
+	switch name {
+	case "me":
+		return "View the current Apple Ads user."
+	case "geo":
+		return "Manage Apple Ads geographic targeting resources."
+	default:
+		return "Manage Apple Ads " + strings.ReplaceAll(name, "-", " ") + "."
+	}
+}
+
 func sentenceFromEndpointName(name string) string {
+	switch name {
+	case "get-me-details":
+		return "View the current Apple Ads user."
+	case "get-user-acl":
+		return "List Apple Ads account ACLs."
+	}
 	text := strings.ReplaceAll(strings.TrimSpace(name), "-", " ")
 	replacements := []struct {
 		old string
