@@ -330,6 +330,11 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 			wantErr: "--granularity HOURLY start date must be within the last 30 days",
 		},
 		{
+			name:    "daily range too long",
+			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--from", "2026-01-01", "--to", "2026-05-01", "--granularity", "DAILY", "--output", "json"},
+			wantErr: "--granularity DAILY supports a maximum 90-day date range",
+		},
+		{
 			name:    "row totals unsupported for search terms",
 			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--return-row-totals", "--output", "json"},
 			wantErr: "--return-row-totals cannot be used with search-term report levels",

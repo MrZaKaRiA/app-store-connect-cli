@@ -220,7 +220,7 @@ func buildReportPresetPayload(flags adsReportPresetFlags, now time.Time) (adsRep
 	if err := validateReportPresetGranularity(level, granularity); err != nil {
 		return adsReportPresetPayload{}, err
 	}
-	if err := validateReportPresetHourlyWindow(granularity, start, end, now); err != nil {
+	if err := validateReportPresetDateWindow(granularity, start, end, now); err != nil {
 		return adsReportPresetPayload{}, err
 	}
 	if *flags.limit < 1 || *flags.limit > appleads.MaxPageLimit(appleads.EndpointSpec{}) {
@@ -273,10 +273,7 @@ func validateReportPresetGranularity(level string, granularity string) error {
 	return nil
 }
 
-func validateReportPresetHourlyWindow(granularity string, start string, end string, now time.Time) error {
-	if granularity != "HOURLY" {
-		return nil
-	}
+func validateReportPresetDateWindow(granularity string, start string, end string, now time.Time) error {
 	startDate, err := parseReportPresetDate("--from", start)
 	if err != nil {
 		return err
@@ -285,15 +282,45 @@ func validateReportPresetHourlyWindow(granularity string, start string, end stri
 	if err != nil {
 		return err
 	}
-	if endDate.Sub(startDate) > 6*24*time.Hour {
-		return fmt.Errorf("--granularity HOURLY supports a maximum 7-day date range")
-	}
-	now = now.UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	if startDate.Before(today.AddDate(0, 0, -30)) {
-		return fmt.Errorf("--granularity HOURLY start date must be within the last 30 days")
+	span := endDate.Sub(startDate)
+	today := reportPresetToday(now)
+
+	switch granularity {
+	case "HOURLY":
+		if span > 6*24*time.Hour {
+			return fmt.Errorf("--granularity HOURLY supports a maximum 7-day date range")
+		}
+		if startDate.Before(today.AddDate(0, 0, -30)) {
+			return fmt.Errorf("--granularity HOURLY start date must be within the last 30 days")
+		}
+	case "DAILY":
+		if span > 89*24*time.Hour {
+			return fmt.Errorf("--granularity DAILY supports a maximum 90-day date range")
+		}
+		if startDate.Before(today.AddDate(0, 0, -90)) {
+			return fmt.Errorf("--granularity DAILY start date must be within the last 90 days")
+		}
+	case "WEEKLY":
+		if span <= 14*24*time.Hour || span > 365*24*time.Hour {
+			return fmt.Errorf("--granularity WEEKLY requires a date range more than 14 days and at most 365 days")
+		}
+		if startDate.Before(today.AddDate(-2, 0, 0)) {
+			return fmt.Errorf("--granularity WEEKLY start date must be within the last 24 months")
+		}
+	case "MONTHLY":
+		if !endDate.After(startDate.AddDate(0, 3, 0)) {
+			return fmt.Errorf("--granularity MONTHLY requires a date range more than 3 months")
+		}
+		if startDate.Before(today.AddDate(-2, 0, 0)) {
+			return fmt.Errorf("--granularity MONTHLY start date must be within the last 24 months")
+		}
 	}
 	return nil
+}
+
+func reportPresetToday(now time.Time) time.Time {
+	now = now.UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func reportPresetDateRange(from, to string, lastDays int, now time.Time, reportingTimeZone string) (string, string, error) {
