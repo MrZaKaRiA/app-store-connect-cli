@@ -149,7 +149,8 @@ asc ads campaigns delete --org "123456" --campaign 987654321 --confirm
 
 ## Ad Groups and Ads
 
-Ad groups sit under campaigns. Ads sit under campaign and ad group IDs:
+Ad groups sit under campaigns. The nested `ads` command group is the Apple Ads
+ad resource, so ad-resource commands read as `asc ads ads ...`:
 
 ```bash  theme={null}
 asc ads ad-groups list --org "123456" --campaign 987654321 --output json
