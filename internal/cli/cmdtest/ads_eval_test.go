@@ -230,6 +230,45 @@ func TestAdsAuthDiscoverTableShowsUserAndAccounts(t *testing.T) {
 	}
 }
 
+func TestAdsAuthDiscoverAcceptsRealMeFieldsAndSingletonACL(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_ORG_ID", "987654")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assertAdsEvalBearer(t, req)
+		assertAdsEvalNoOrg(t, req)
+		assertAdsEvalNoBody(t, req)
+
+		switch req.URL.Path {
+		case "/api/v5/me":
+			return adsJSONResponse(200, `{"data":{"userId":"user-1","parentOrgId":987654}}`), nil
+		case "/api/v5/acls":
+			return adsJSONResponse(200, `{"data":{"orgId":987654,"orgName":"Example Org","roleNames":["Admin"]}}`), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	}))
+
+	stdout, stderr, err := runAdsEvalCommand(t, "ads", "auth", "discover")
+	if err != nil {
+		t.Fatalf("discover table error: %v\nstderr: %s", err, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("discover table stderr = %q, want empty", stderr)
+	}
+	for _, want := range []string{
+		"User: user-1",
+		"987654 - Example Org (active)",
+		"Roles: Admin",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("discover table stdout = %q, missing %q", stdout, want)
+		}
+	}
+}
+
 func TestAdsAuthDiscoverRejectsInvalidOutput(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))

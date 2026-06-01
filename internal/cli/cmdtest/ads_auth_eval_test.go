@@ -203,6 +203,58 @@ func TestAdsAuthStatusOmitsBlankConfigOrgSource(t *testing.T) {
 	}
 }
 
+func TestAdsAuthStatusKeepsAuthSourceWhenOptionalOrgConfigIsInvalid(t *testing.T) {
+	configPath := writeAdsEvalPayload(t, "config.json", `{"ads":`)
+	t.Setenv("ASC_CONFIG_PATH", configPath)
+	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+
+	stdout, stderr, err := runAdsEvalCommand(t, "ads", "auth", "status", "--output", "json")
+	if err != nil {
+		t.Fatalf("status error: %v\nstderr: %s", err, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("status stderr = %q, want empty", stderr)
+	}
+	var status struct {
+		Active struct {
+			Source string `json:"source"`
+			Error  string `json:"error"`
+		} `json:"active"`
+		CredentialsError string `json:"credentials_error"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+		t.Fatalf("status stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if status.Active.Source != "ASC_ADS_ACCESS_TOKEN" {
+		t.Fatalf("active.source = %q, want ASC_ADS_ACCESS_TOKEN", status.Active.Source)
+	}
+	if status.Active.Error == "" || !strings.Contains(status.Active.Error, "failed to parse config") {
+		t.Fatalf("active.error = %q, want config parse error", status.Active.Error)
+	}
+	if status.CredentialsError == "" || !strings.Contains(status.CredentialsError, "failed to parse config") {
+		t.Fatalf("credentials_error = %q, want config parse error", status.CredentialsError)
+	}
+
+	stdout, stderr, err = runAdsEvalCommand(t, "ads", "auth", "status")
+	if err != nil {
+		t.Fatalf("table status error: %v\nstderr: %s", err, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("table status stderr = %q, want empty", stderr)
+	}
+	for _, want := range []string{
+		"Active auth: ASC_ADS_ACCESS_TOKEN",
+		"Org ID: unavailable (",
+		"Stored credentials: unavailable (",
+		"failed to parse config",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("table status = %q, missing %q", stdout, want)
+		}
+	}
+}
+
 func TestAdsAuthEvalValidatesUsageErrors(t *testing.T) {
 	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "config.json"))
 	t.Setenv("ASC_ADS_BYPASS_KEYCHAIN", "1")

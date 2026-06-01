@@ -1,6 +1,7 @@
 package ads
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -177,9 +178,11 @@ Examples:
 			if err != nil {
 				return shared.UsageError(err.Error())
 			}
+			active := statusActiveContext()
 			credentials, err := appleads.ListCredentials()
+			credentialsError := ""
 			if err != nil {
-				return fmt.Errorf("ads auth status: %w", err)
+				credentialsError = err.Error()
 			}
 			rows := make([]adsAuthStatusRow, 0, len(credentials))
 			failures := 0
@@ -216,9 +219,10 @@ Examples:
 				rows = append(rows, row)
 			}
 			result := adsAuthStatusOutput{
-				Storage:     storageDescription(),
-				Active:      statusActiveContext(),
-				Credentials: rows,
+				Storage:          storageDescription(),
+				Active:           active,
+				Credentials:      rows,
+				CredentialsError: credentialsError,
 			}
 			if normalized == "json" {
 				if err := shared.PrintOutput(result, "json", *output.Pretty); err != nil {
@@ -236,9 +240,10 @@ Examples:
 }
 
 type adsAuthStatusOutput struct {
-	Storage     string             `json:"storage"`
-	Active      adsAuthContext     `json:"active"`
-	Credentials []adsAuthStatusRow `json:"credentials"`
+	Storage          string             `json:"storage"`
+	Active           adsAuthContext     `json:"active"`
+	Credentials      []adsAuthStatusRow `json:"credentials"`
+	CredentialsError string             `json:"credentials_error,omitempty"`
 }
 
 type adsAuthContext struct {
@@ -266,6 +271,10 @@ func printStatusTable(result adsAuthStatusOutput) {
 	fmt.Printf("Credential storage: %s\n\n", result.Storage)
 	printActiveContext(result.Active)
 	fmt.Println()
+	if result.CredentialsError != "" {
+		fmt.Printf("Stored credentials: unavailable (%s)\n", result.CredentialsError)
+		return
+	}
 	if len(result.Credentials) == 0 {
 		fmt.Println("No Apple Ads credentials stored. Run 'asc ads auth login' to get started.")
 		return
@@ -296,7 +305,15 @@ func printStatusTable(result adsAuthStatusOutput) {
 
 func printActiveContext(active adsAuthContext) {
 	if active.Error != "" {
-		fmt.Printf("Active auth: unavailable (%s)\n", active.Error)
+		if active.Source == "" {
+			fmt.Printf("Active auth: unavailable (%s)\n", active.Error)
+			return
+		}
+		fmt.Printf("Active auth: %s\n", active.Source)
+		if active.Profile != "" {
+			fmt.Printf("  Profile: %s\n", active.Profile)
+		}
+		fmt.Printf("  Org ID: unavailable (%s)\n", active.Error)
 		return
 	}
 	if active.Source == "" {
@@ -328,7 +345,11 @@ func statusActiveContext() adsAuthContext {
 	}
 	orgID, orgSource, err := resolveOrgIDWithSource(commonFlags{}, credentials)
 	if err != nil {
-		return adsAuthContext{Error: err.Error()}
+		return adsAuthContext{
+			Profile: credentials.Profile,
+			Source:  source,
+			Error:   err.Error(),
+		}
 	}
 	return adsAuthContext{
 		Profile:     credentials.Profile,
@@ -493,23 +514,24 @@ func printDiscoveryTable(result adsAuthDiscoveryOutput) {
 }
 
 func discoveryUserSummary(me json.RawMessage) string {
-	var user struct {
-		ID    string `json:"id"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
-	}
+	var user map[string]any
 	if err := json.Unmarshal(me, &user); err != nil {
 		return ""
 	}
+	id := jsonScalarString(firstMapValue(user, "userId", "id"))
+	name := jsonScalarString(firstMapValue(user, "name"))
+	email := jsonScalarString(firstMapValue(user, "email"))
 	switch {
-	case strings.TrimSpace(user.Name) != "" && strings.TrimSpace(user.ID) != "":
-		return strings.TrimSpace(user.Name) + " (" + strings.TrimSpace(user.ID) + ")"
-	case strings.TrimSpace(user.Name) != "":
-		return strings.TrimSpace(user.Name)
-	case strings.TrimSpace(user.Email) != "":
-		return strings.TrimSpace(user.Email)
+	case name != "" && id != "":
+		return name + " (" + id + ")"
+	case name != "":
+		return name
+	case email != "":
+		return email
+	case id != "":
+		return id
 	default:
-		return strings.TrimSpace(user.ID)
+		return jsonScalarString(firstMapValue(user, "parentOrgId"))
 	}
 }
 
@@ -528,13 +550,17 @@ func envelopeData(raw appleads.RawResponse) (json.RawMessage, error) {
 
 func summarizeACLAccounts(raw appleads.RawResponse, activeOrgID string) ([]adsAuthAccountSummary, error) {
 	var envelope struct {
-		Data []map[string]any `json:"data"`
+		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, err
 	}
-	accounts := make([]adsAuthAccountSummary, 0, len(envelope.Data))
-	for _, item := range envelope.Data {
+	items, err := aclDataItems(envelope.Data)
+	if err != nil {
+		return nil, err
+	}
+	accounts := make([]adsAuthAccountSummary, 0, len(items))
+	for _, item := range items {
 		orgID := jsonScalarString(firstMapValue(item, "orgId", "orgID", "organizationId", "id"))
 		account := adsAuthAccountSummary{
 			OrgID:  orgID,
@@ -545,6 +571,25 @@ func summarizeACLAccounts(raw appleads.RawResponse, activeOrgID string) ([]adsAu
 		accounts = append(accounts, account)
 	}
 	return accounts, nil
+}
+
+func aclDataItems(data json.RawMessage) ([]map[string]any, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	if trimmed[0] == '[' {
+		var items []map[string]any
+		if err := json.Unmarshal(trimmed, &items); err != nil {
+			return nil, err
+		}
+		return items, nil
+	}
+	var item map[string]any
+	if err := json.Unmarshal(trimmed, &item); err != nil {
+		return nil, err
+	}
+	return []map[string]any{item}, nil
 }
 
 func firstMapValue(item map[string]any, keys ...string) any {
