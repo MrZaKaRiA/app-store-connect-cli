@@ -156,6 +156,7 @@ func TestAdsReportsPresetBuildsCampaignRequest(t *testing.T) {
 
 func TestAdsReportsPresetBuildsScopedKeywordRequest(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_ORG_ID", "")
 	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
 
 	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {

@@ -128,6 +128,7 @@ func TestReportPresetDateRangeValidation(t *testing.T) {
 		{name: "negative last days", days: -1, wantErr: "--last-days must be >= 0"},
 		{name: "missing range", wantErr: "either --last-days or both --from and --to are required"},
 		{name: "bad from", from: "2026/05/01", to: "2026-05-31", wantErr: "--from must be in YYYY-MM-DD format"},
+		{name: "bad to", from: "2026-05-01", to: "2026/05/31", wantErr: "--to must be in YYYY-MM-DD format"},
 		{name: "reversed range", from: "2026-06-01", to: "2026-05-31", wantErr: "--to must be on or after --from"},
 	}
 	for _, tt := range tests {
