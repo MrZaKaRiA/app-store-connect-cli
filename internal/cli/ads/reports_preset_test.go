@@ -148,7 +148,7 @@ func TestBuildReportPresetPayloadAllowsHourlyWhereSupported(t *testing.T) {
 			flags := reportPresetTestFlags(
 				level,
 				"12345",
-				"2026-05-26",
+				"2026-05-25",
 				"2026-06-01",
 				0,
 				"UTC",
@@ -167,6 +167,40 @@ func TestBuildReportPresetPayloadAllowsHourlyWhereSupported(t *testing.T) {
 	}
 }
 
+func TestBuildReportPresetPayloadAllowsDateWindowBoundaries(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		granularity string
+		from        string
+		to          string
+	}{
+		{name: "hourly exactly seven days apart", granularity: "HOURLY", from: "2026-05-25", to: "2026-06-01"},
+		{name: "weekly fifteen inclusive days", granularity: "WEEKLY", from: "2026-05-18", to: "2026-06-01"},
+		{name: "weekly three hundred sixty five inclusive days", granularity: "WEEKLY", from: "2025-06-02", to: "2026-06-01"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := reportPresetTestFlags(
+				"campaigns",
+				"",
+				tt.from,
+				tt.to,
+				0,
+				"UTC",
+			)
+			granularity := tt.granularity
+			flags.granularity = &granularity
+
+			payload, err := buildReportPresetPayload(flags, time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("buildReportPresetPayload() error: %v", err)
+			}
+			if payload.StartTime != tt.from || payload.EndTime != tt.to {
+				t.Fatalf("range = %s..%s, want %s..%s", payload.StartTime, payload.EndTime, tt.from, tt.to)
+			}
+		})
+	}
+}
+
 func TestBuildReportPresetPayloadRejectsDateWindowsAppleWillRefuse(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -175,12 +209,12 @@ func TestBuildReportPresetPayloadRejectsDateWindowsAppleWillRefuse(t *testing.T)
 		to          string
 		wantErr     string
 	}{
-		{name: "hourly more than seven days", granularity: "HOURLY", from: "2026-05-25", to: "2026-06-01", wantErr: "--granularity HOURLY supports a maximum 7-day date range"},
+		{name: "hourly more than seven days", granularity: "HOURLY", from: "2026-05-24", to: "2026-06-01", wantErr: "--granularity HOURLY supports a maximum 7-day date range"},
 		{name: "hourly start too old", granularity: "HOURLY", from: "2026-05-01", to: "2026-05-07", wantErr: "--granularity HOURLY start date must be within the last 30 days"},
 		{name: "daily more than ninety days", granularity: "DAILY", from: "2026-02-01", to: "2026-05-02", wantErr: "--granularity DAILY supports a maximum 90-day date range"},
 		{name: "daily start too old", granularity: "DAILY", from: "2026-02-01", to: "2026-02-07", wantErr: "--granularity DAILY start date must be within the last 90 days"},
-		{name: "weekly too short", granularity: "WEEKLY", from: "2026-05-18", to: "2026-06-01", wantErr: "--granularity WEEKLY requires a date range more than 14 days"},
-		{name: "weekly too long", granularity: "WEEKLY", from: "2025-05-01", to: "2026-05-02", wantErr: "--granularity WEEKLY requires a date range more than 14 days"},
+		{name: "weekly too short", granularity: "WEEKLY", from: "2026-05-19", to: "2026-06-01", wantErr: "--granularity WEEKLY requires a date range of 15 to 365 inclusive days"},
+		{name: "weekly too long", granularity: "WEEKLY", from: "2025-05-01", to: "2026-05-02", wantErr: "--granularity WEEKLY requires a date range of 15 to 365 inclusive days"},
 		{name: "weekly start too old", granularity: "WEEKLY", from: "2024-05-01", to: "2024-05-20", wantErr: "--granularity WEEKLY start date must be within the last 24 months"},
 		{name: "monthly too short", granularity: "MONTHLY", from: "2026-01-01", to: "2026-04-01", wantErr: "--granularity MONTHLY requires a date range more than 3 months"},
 		{name: "monthly start too old", granularity: "MONTHLY", from: "2024-05-01", to: "2024-09-01", wantErr: "--granularity MONTHLY start date must be within the last 24 months"},

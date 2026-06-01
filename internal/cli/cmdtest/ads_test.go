@@ -272,7 +272,7 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ORG_ID", "123456")
 	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
 	recentFrom, recentTo := adsReportRecentRange(7)
-	hourlyLongFrom, hourlyLongTo := adsReportRecentRange(8)
+	hourlyLongFrom, hourlyLongTo := adsReportRangeEnding(8, 0)
 	hourlyOldFrom, hourlyOldTo := adsReportRangeEnding(31, 25)
 	dailyLongFrom, dailyLongTo := adsReportRecentRange(91)
 	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
