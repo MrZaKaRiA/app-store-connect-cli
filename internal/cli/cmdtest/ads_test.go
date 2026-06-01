@@ -197,6 +197,37 @@ func TestAdsCampaignPauseAndResumeUseCuratedStatusPayloads(t *testing.T) {
 	}
 }
 
+func TestAdsCampaignPauseHonorsParentFlagsBeforeWorkflowSubcommand(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPut || req.URL.Path != "/api/v5/campaigns/123" {
+			t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+		}
+		if got := req.Header.Get("X-AP-Context"); got != "orgId=123456" {
+			t.Fatalf("X-AP-Context = %q, want parent --org value", got)
+		}
+		return adsJSONResponse(200, `{"data":{"id":123,"status":"PAUSED"}}`), nil
+	}))
+
+	root := RootCommand("dev")
+	if err := root.Parse([]string{"ads", "campaigns", "--org", "123456", "pause", "--campaign", "123", "--confirm"}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	stdout, stderr := captureOutput(t, func() {
+		if err := root.Run(context.Background()); err != nil {
+			t.Fatalf("run error: %v", err)
+		}
+	})
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, `"status":"PAUSED"`) {
+		t.Fatalf("stdout = %q, want paused response", stdout)
+	}
+}
+
 func TestAdsCampaignPauseValidatesBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_ADS_ORG_ID", "123456")

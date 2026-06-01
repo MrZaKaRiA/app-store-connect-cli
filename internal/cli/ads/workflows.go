@@ -15,21 +15,23 @@ import (
 type campaignStatusWorkflowFlags struct {
 	common   commonFlags
 	output   shared.OutputFlags
+	flagSet  *flag.FlagSet
 	campaign *string
 	confirm  *bool
+	parent   *endpointFlagValues
 }
 
-func workflowSubcommands(path []string) []*ffcli.Command {
+func workflowSubcommands(path []string, parent *endpointFlagValues) []*ffcli.Command {
 	if len(path) == 1 && path[0] == "campaigns" {
 		return []*ffcli.Command{
-			campaignStatusWorkflowCommand("pause", "PAUSED", "Pause a campaign."),
-			campaignStatusWorkflowCommand("resume", "ENABLED", "Resume a campaign."),
+			campaignStatusWorkflowCommand("pause", "PAUSED", "Pause a campaign.", parent),
+			campaignStatusWorkflowCommand("resume", "ENABLED", "Resume a campaign.", parent),
 		}
 	}
 	return nil
 }
 
-func campaignStatusWorkflowCommand(name, status, shortHelp string) *ffcli.Command {
+func campaignStatusWorkflowCommand(name, status, shortHelp string, parent *endpointFlagValues) *ffcli.Command {
 	fs := flag.NewFlagSet("campaigns "+name, flag.ExitOnError)
 	flags := campaignStatusWorkflowFlags{
 		common: commonFlags{
@@ -37,8 +39,10 @@ func campaignStatusWorkflowCommand(name, status, shortHelp string) *ffcli.Comman
 			Org:        fs.String("org", "", "Apple Ads organization ID (or ASC_ADS_ORG_ID env)"),
 		},
 		output:   shared.BindOutputFlags(fs),
+		flagSet:  fs,
 		campaign: fs.String("campaign", "", "Apple Ads campaign ID (required)"),
 		confirm:  fs.Bool("confirm", false, "Confirm this Apple Ads campaign status change"),
+		parent:   parent,
 	}
 	return &ffcli.Command{
 		Name:       name,
@@ -78,7 +82,9 @@ func executeCampaignStatusWorkflow(ctx context.Context, commandName, status stri
 		return fmt.Errorf("ads campaigns status workflow: missing campaigns update endpoint")
 	}
 
-	client, err := resolveClient(ctx, flags.common, spec.RequiresOrg)
+	common, output := effectiveCampaignStatusWorkflowFlags(flags)
+
+	client, err := resolveClient(ctx, common, spec.RequiresOrg)
 	if err != nil {
 		return fmt.Errorf("ads campaigns %s: %w", commandName, err)
 	}
@@ -96,7 +102,41 @@ func executeCampaignStatusWorkflow(ctx context.Context, commandName, status stri
 	if err != nil {
 		return fmt.Errorf("ads campaigns %s: %w", commandName, err)
 	}
-	return shared.PrintOutput(result, *flags.output.Output, *flags.output.Pretty)
+	return shared.PrintOutput(result, *output.Output, *output.Pretty)
+}
+
+func effectiveCampaignStatusWorkflowFlags(flags campaignStatusWorkflowFlags) (commonFlags, shared.OutputFlags) {
+	common := flags.common
+	output := flags.output
+	if flags.parent == nil || flags.parent.flagSet == nil {
+		return common, output
+	}
+	if !flagWasSet(flags.flagSet, "ads-profile") && flagWasSet(flags.parent.flagSet, "ads-profile") {
+		common.AdsProfile = flags.parent.common.AdsProfile
+	}
+	if !flagWasSet(flags.flagSet, "org") && flagWasSet(flags.parent.flagSet, "org") {
+		common.Org = flags.parent.common.Org
+	}
+	if !flagWasSet(flags.flagSet, "output") && flagWasSet(flags.parent.flagSet, "output") {
+		output.Output = flags.parent.output.Output
+	}
+	if !flagWasSet(flags.flagSet, "pretty") && flagWasSet(flags.parent.flagSet, "pretty") {
+		output.Pretty = flags.parent.output.Pretty
+	}
+	return common, output
+}
+
+func flagWasSet(fs *flag.FlagSet, name string) bool {
+	if fs == nil {
+		return false
+	}
+	wasSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			wasSet = true
+		}
+	})
+	return wasSet
 }
 
 func validateAdsIntegerFlag(name, raw string) error {
