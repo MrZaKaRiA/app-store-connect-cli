@@ -83,6 +83,10 @@ func executeCampaignStatusWorkflow(ctx context.Context, commandName, status stri
 	}
 
 	common, output := effectiveCampaignStatusWorkflowFlags(flags)
+	outputFormat, err := shared.ValidateOutputFormat(*output.Output, *output.Pretty)
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
 
 	client, err := resolveClient(ctx, common, spec.RequiresOrg)
 	if err != nil {
@@ -102,7 +106,7 @@ func executeCampaignStatusWorkflow(ctx context.Context, commandName, status stri
 	if err != nil {
 		return fmt.Errorf("ads campaigns %s: %w", commandName, err)
 	}
-	return shared.PrintOutput(result, *output.Output, *output.Pretty)
+	return shared.PrintOutput(result, outputFormat, *output.Pretty)
 }
 
 func effectiveCampaignStatusWorkflowFlags(flags campaignStatusWorkflowFlags) (commonFlags, shared.OutputFlags) {

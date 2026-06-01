@@ -257,6 +257,16 @@ func TestAdsCampaignPauseValidatesBeforeNetwork(t *testing.T) {
 			args:    []string{"ads", "campaigns", "pause", "--confirm"},
 			wantErr: "--campaign is required",
 		},
+		{
+			name:    "parent output conflicts with child pretty",
+			args:    []string{"ads", "campaigns", "--output", "table", "pause", "--campaign", "123", "--confirm", "--pretty"},
+			wantErr: "--pretty is only valid with JSON output",
+		},
+		{
+			name:    "parent pretty conflicts with child output",
+			args:    []string{"ads", "campaigns", "--pretty", "resume", "--campaign", "123", "--confirm", "--output", "table"},
+			wantErr: "--pretty is only valid with JSON output",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := RootCommand("dev")
