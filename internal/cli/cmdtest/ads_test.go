@@ -243,6 +243,29 @@ func TestAdsCampaignPauseValidatesBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestAdsCampaignResumeReportsCommandNameOnAuthFailure(t *testing.T) {
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	}))
+
+	root := RootCommand("dev")
+	if err := root.Parse([]string{"ads", "campaigns", "resume", "--campaign", "123", "--confirm", "--output", "json"}); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	var runErr error
+	_, stderr := captureOutput(t, func() {
+		runErr = root.Run(context.Background())
+	})
+	if runErr == nil || !strings.Contains(runErr.Error(), "ads campaigns resume:") {
+		t.Fatalf("run error = %v, want resume command name", runErr)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestAdsEndpointRejectsUnexpectedArgsBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_ADS_ORG_ID", "123456")

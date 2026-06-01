@@ -121,6 +121,9 @@ func endpointShortHelp(node *commandNode) string {
 	if node.spec == nil {
 		return "Manage Apple Ads " + strings.ReplaceAll(node.name, "-", " ") + "."
 	}
+	if len(node.children) > 0 {
+		return "Manage Apple Ads " + strings.ReplaceAll(node.name, "-", " ") + "."
+	}
 	return sentenceFromEndpointName(node.spec.Name)
 }
 

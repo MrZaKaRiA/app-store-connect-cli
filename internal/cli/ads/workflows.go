@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"strings"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 
@@ -38,7 +37,7 @@ func campaignStatusWorkflowCommand(name, status, shortHelp string) *ffcli.Comman
 			Org:        fs.String("org", "", "Apple Ads organization ID (or ASC_ADS_ORG_ID env)"),
 		},
 		output:   shared.BindOutputFlags(fs),
-		campaign: fs.String("campaign", "", "campaignId (required)"),
+		campaign: fs.String("campaign", "", "Apple Ads campaign ID (required)"),
 		confirm:  fs.Bool("confirm", false, "Confirm this Apple Ads campaign status change"),
 	}
 	return &ffcli.Command{
@@ -50,19 +49,19 @@ func campaignStatusWorkflowCommand(name, status, shortHelp string) *ffcli.Comman
 Endpoint: PUT v5/campaigns/{campaignId}
 
 Examples:
-  asc ads campaigns %s --campaign CAMPAIGN --confirm --org ORG_ID`, shortHelp, name),
+  asc ads campaigns %s --campaign CAMPAIGN_ID --confirm --org ORG_ID`, shortHelp, name),
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {
 			if err := rejectUnexpectedArgs(args); err != nil {
 				return err
 			}
-			return executeCampaignStatusWorkflow(ctx, status, flags)
+			return executeCampaignStatusWorkflow(ctx, name, status, flags)
 		},
 	}
 }
 
-func executeCampaignStatusWorkflow(ctx context.Context, status string, flags campaignStatusWorkflowFlags) error {
+func executeCampaignStatusWorkflow(ctx context.Context, commandName, status string, flags campaignStatusWorkflowFlags) error {
 	campaignID := value(flags.campaign)
 	if campaignID == "" {
 		return shared.UsageError("--campaign is required")
@@ -81,7 +80,7 @@ func executeCampaignStatusWorkflow(ctx context.Context, status string, flags cam
 
 	client, err := resolveClient(ctx, flags.common, spec.RequiresOrg)
 	if err != nil {
-		return fmt.Errorf("ads campaigns %s: %w", strings.ToLower(status), err)
+		return fmt.Errorf("ads campaigns %s: %w", commandName, err)
 	}
 
 	requestCtx, cancel := requestContext(ctx)
@@ -95,7 +94,7 @@ func executeCampaignStatusWorkflow(ctx context.Context, status string, flags cam
 	}
 	result, err := client.Do(requestCtx, spec, map[string]string{"campaignId": campaignID}, nil, body)
 	if err != nil {
-		return fmt.Errorf("ads campaigns %s: %w", strings.ToLower(status), err)
+		return fmt.Errorf("ads campaigns %s: %w", commandName, err)
 	}
 	return shared.PrintOutput(result, *flags.output.Output, *flags.output.Pretty)
 }
