@@ -89,13 +89,13 @@ func ReportsPresetCommand() *ffcli.Command {
 		adGroup:         fs.String("ad-group", "", "Ad group ID for ad-group-scoped report levels"),
 		from:            fs.String("from", "", "Start date in YYYY-MM-DD"),
 		to:              fs.String("to", "", "End date in YYYY-MM-DD"),
-		lastDays:        fs.Int("last-days", 0, "Use an inclusive range ending today in --time-zone"),
+		lastDays:        fs.Int("last-days", 0, "Use an inclusive UTC range ending today"),
 		granularity:     fs.String("granularity", "DAILY", "Report granularity: DAILY, WEEKLY, MONTHLY"),
 		fields:          fs.String("fields", "", "Comma-separated selector fields to request"),
 		sort:            fs.String("sort", "", "Sort field with optional direction, e.g. impressions:desc"),
 		limit:           fs.Int("limit", 1000, "Report row limit (1..1000)"),
 		offset:          fs.Int("offset", 0, "Report row offset (>=0)"),
-		timeZone:        fs.String("time-zone", "UTC", "IANA reporting time zone"),
+		timeZone:        fs.String("time-zone", "UTC", "Apple Ads reporting time zone: UTC or ORTZ"),
 		returnRowTotals: fs.Bool("return-row-totals", false, "Request row totals in the report response"),
 	}
 
@@ -109,14 +109,16 @@ This helper builds a documented ReportingRequest for the existing Apple Ads
 report endpoints. Choose the report resource with --level. Campaign-scoped and
 ad-group-scoped report levels require --campaign and/or --ad-group.
 
-Use --last-days for an inclusive rolling date range; "today" is calculated in
---time-zone. Use the raw report commands with --file when you need custom
-conditions or advanced selector JSON. Ad-level reports require --sort because
-Apple Ads requires selector.orderBy for that endpoint.
+Apple Ads accepts UTC and ORTZ (organization time zone) for --time-zone. Use
+--last-days for an inclusive UTC rolling date range; use --from and --to when
+requesting ORTZ because Apple Ads resolves the organization time zone. Use the
+raw report commands with --file when you need custom conditions or advanced
+selector JSON. Ad-level reports require --sort because Apple Ads requires
+selector.orderBy for that endpoint.
 
 Examples:
   asc ads reports preset --level campaigns --from 2026-05-01 --to 2026-05-31 --fields campaignName,impressions,taps,spend --sort impressions:desc --org "123456"
-  asc ads reports preset --level keywords --campaign 12345 --last-days 7 --time-zone America/Los_Angeles --fields keyword,impressions,taps --org "123456"
+  asc ads reports preset --level keywords --campaign 12345 --last-days 7 --fields keyword,impressions,taps --org "123456"
   asc ads reports preset --level ads --campaign 12345 --from 2026-05-01 --to 2026-05-31 --sort impressions:desc --org "123456"`,
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
@@ -195,12 +197,12 @@ func reportPresetPathParams(spec appleads.EndpointSpec, flags adsReportPresetFla
 }
 
 func buildReportPresetPayload(flags adsReportPresetFlags, now time.Time) (adsReportPresetPayload, error) {
-	reportingTimeZone := strings.TrimSpace(*flags.timeZone)
-	reportingLocation, err := reportPresetLocation(reportingTimeZone)
+	level := strings.TrimSpace(*flags.level)
+	reportingTimeZone, err := normalizeReportPresetTimeZone(*flags.timeZone, level)
 	if err != nil {
 		return adsReportPresetPayload{}, err
 	}
-	start, end, err := reportPresetDateRange(*flags.from, *flags.to, *flags.lastDays, now, reportingLocation)
+	start, end, err := reportPresetDateRange(*flags.from, *flags.to, *flags.lastDays, now, reportingTimeZone)
 	if err != nil {
 		return adsReportPresetPayload{}, err
 	}
@@ -217,7 +219,7 @@ func buildReportPresetPayload(flags adsReportPresetFlags, now time.Time) (adsRep
 	if *flags.offset < 0 {
 		return adsReportPresetPayload{}, fmt.Errorf("--offset must be >= 0")
 	}
-	if strings.TrimSpace(*flags.level) == "ads" && strings.TrimSpace(*flags.sort) == "" {
+	if level == "ads" && strings.TrimSpace(*flags.sort) == "" {
 		return adsReportPresetPayload{}, fmt.Errorf("--sort is required for --level ads")
 	}
 
@@ -245,7 +247,7 @@ func buildReportPresetPayload(flags adsReportPresetFlags, now time.Time) (adsRep
 	}, nil
 }
 
-func reportPresetDateRange(from, to string, lastDays int, now time.Time, reportingLocation *time.Location) (string, string, error) {
+func reportPresetDateRange(from, to string, lastDays int, now time.Time, reportingTimeZone string) (string, string, error) {
 	from = strings.TrimSpace(from)
 	to = strings.TrimSpace(to)
 	if lastDays < 0 {
@@ -255,7 +257,10 @@ func reportPresetDateRange(from, to string, lastDays int, now time.Time, reporti
 		if from != "" || to != "" {
 			return "", "", fmt.Errorf("--last-days cannot be combined with --from or --to")
 		}
-		reportingNow := now.In(reportingLocation)
+		if reportingTimeZone != "UTC" {
+			return "", "", fmt.Errorf("--last-days requires --time-zone UTC; use --from and --to for ORTZ")
+		}
+		reportingNow := now.UTC()
 		end := reportingNow.Format("2006-01-02")
 		start := reportingNow.AddDate(0, 0, -(lastDays - 1)).Format("2006-01-02")
 		return start, end, nil
@@ -277,15 +282,18 @@ func reportPresetDateRange(from, to string, lastDays int, now time.Time, reporti
 	return from, to, nil
 }
 
-func reportPresetLocation(value string) (*time.Location, error) {
-	if value == "" {
-		return time.UTC, nil
+func normalizeReportPresetTimeZone(value string, level string) (string, error) {
+	normalized := strings.ToUpper(strings.TrimSpace(value))
+	if normalized == "" {
+		normalized = "UTC"
 	}
-	location, err := time.LoadLocation(value)
-	if err != nil {
-		return nil, fmt.Errorf("--time-zone must be a valid IANA time zone")
+	if !slices.Contains([]string{"UTC", "ORTZ"}, normalized) {
+		return "", fmt.Errorf("--time-zone must be UTC or ORTZ")
 	}
-	return location, nil
+	if slices.Contains([]string{"search-terms", "ad-group-search-terms"}, level) && normalized != "ORTZ" {
+		return "", fmt.Errorf("--time-zone must be ORTZ for search-term report levels")
+	}
+	return normalized, nil
 }
 
 func parseReportPresetDate(flagName string, value string) (time.Time, error) {

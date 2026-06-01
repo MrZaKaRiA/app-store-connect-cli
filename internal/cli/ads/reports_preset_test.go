@@ -7,7 +7,7 @@ import (
 )
 
 func TestReportPresetDateRangeLastDays(t *testing.T) {
-	start, end, err := reportPresetDateRange("", "", 7, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), time.UTC)
+	start, end, err := reportPresetDateRange("", "", 7, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), "UTC")
 	if err != nil {
 		t.Fatalf("reportPresetDateRange() error: %v", err)
 	}
@@ -23,7 +23,8 @@ func TestReportsPresetCommandHelpShowsOperatorGuidance(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Choose the report resource with --level.",
-		"today\" is calculated in\n--time-zone",
+		"Apple Ads accepts UTC and ORTZ",
+		"--last-days for an inclusive UTC rolling date range",
 		"Ad-level reports require --sort",
 		"asc ads reports preset --level ads --campaign 12345 --from 2026-05-01 --to 2026-05-31 --sort impressions:desc",
 	} {
@@ -31,38 +32,31 @@ func TestReportsPresetCommandHelpShowsOperatorGuidance(t *testing.T) {
 			t.Fatalf("LongHelp missing %q\n%s", want, cmd.LongHelp)
 		}
 	}
-	if got := cmd.FlagSet.Lookup("last-days").Usage; got != "Use an inclusive range ending today in --time-zone" {
+	if got := cmd.FlagSet.Lookup("last-days").Usage; got != "Use an inclusive UTC range ending today" {
 		t.Fatalf("--last-days usage = %q", got)
 	}
-	if got := cmd.FlagSet.Lookup("time-zone").Usage; got != "IANA reporting time zone" {
+	if got := cmd.FlagSet.Lookup("time-zone").Usage; got != "Apple Ads reporting time zone: UTC or ORTZ" {
 		t.Fatalf("--time-zone usage = %q", got)
 	}
 }
 
-func TestBuildReportPresetPayloadLastDaysUsesReportingTimeZone(t *testing.T) {
+func TestBuildReportPresetPayloadLastDaysUsesUTC(t *testing.T) {
 	payload, err := buildReportPresetPayload(reportPresetTestFlags(
 		"campaigns",
 		"",
 		"",
 		"",
-		"",
 		1,
-		"DAILY",
-		"",
-		"",
-		1000,
-		0,
-		"America/Los_Angeles",
-		false,
+		"utc",
 	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("buildReportPresetPayload() error: %v", err)
 	}
-	if payload.StartTime != "2026-05-31" || payload.EndTime != "2026-05-31" {
-		t.Fatalf("range = %s..%s, want 2026-05-31..2026-05-31", payload.StartTime, payload.EndTime)
+	if payload.StartTime != "2026-06-01" || payload.EndTime != "2026-06-01" {
+		t.Fatalf("range = %s..%s, want 2026-06-01..2026-06-01", payload.StartTime, payload.EndTime)
 	}
-	if payload.TimeZone != "America/Los_Angeles" {
-		t.Fatalf("timeZone = %q, want America/Los_Angeles", payload.TimeZone)
+	if payload.TimeZone != "UTC" {
+		t.Fatalf("timeZone = %q, want UTC", payload.TimeZone)
 	}
 }
 
@@ -72,18 +66,39 @@ func TestBuildReportPresetPayloadValidatesTimeZone(t *testing.T) {
 		"",
 		"",
 		"",
+		1,
+		"America/Los_Angeles",
+	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
+	if err == nil || !strings.Contains(err.Error(), "--time-zone must be UTC or ORTZ") {
+		t.Fatalf("error = %v, want time-zone validation", err)
+	}
+}
+
+func TestBuildReportPresetPayloadRejectsLastDaysWithORTZ(t *testing.T) {
+	_, err := buildReportPresetPayload(reportPresetTestFlags(
+		"campaigns",
+		"",
+		"",
 		"",
 		1,
-		"DAILY",
-		"",
-		"",
-		1000,
-		0,
-		"Pacific/Atlantis",
-		false,
+		"ORTZ",
 	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
-	if err == nil || !strings.Contains(err.Error(), "--time-zone must be a valid IANA time zone") {
-		t.Fatalf("error = %v, want time-zone validation", err)
+	if err == nil || !strings.Contains(err.Error(), "--last-days requires --time-zone UTC") {
+		t.Fatalf("error = %v, want last-days ORTZ validation", err)
+	}
+}
+
+func TestBuildReportPresetPayloadRequiresORTZForSearchTerms(t *testing.T) {
+	_, err := buildReportPresetPayload(reportPresetTestFlags(
+		"search-terms",
+		"12345",
+		"2026-05-01",
+		"2026-05-31",
+		0,
+		"UTC",
+	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
+	if err == nil || !strings.Contains(err.Error(), "--time-zone must be ORTZ for search-term report levels") {
+		t.Fatalf("error = %v, want search-term time-zone validation", err)
 	}
 }
 
@@ -91,17 +106,10 @@ func TestBuildReportPresetPayloadRequiresSortForAds(t *testing.T) {
 	_, err := buildReportPresetPayload(reportPresetTestFlags(
 		"ads",
 		"12345",
-		"",
 		"2026-05-01",
 		"2026-05-31",
 		0,
-		"DAILY",
-		"",
-		"",
-		1000,
-		0,
 		"UTC",
-		false,
 	), time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC))
 	if err == nil || !strings.Contains(err.Error(), "--sort is required for --level ads") {
 		t.Fatalf("error = %v, want ad-level sort validation", err)
@@ -124,7 +132,7 @@ func TestReportPresetDateRangeValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := reportPresetDateRange(tt.from, tt.to, tt.days, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), time.UTC)
+			_, _, err := reportPresetDateRange(tt.from, tt.to, tt.days, time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC), "UTC")
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want contains %q", err, tt.wantErr)
 			}
@@ -132,7 +140,14 @@ func TestReportPresetDateRangeValidation(t *testing.T) {
 	}
 }
 
-func reportPresetTestFlags(level, campaign, adGroup, from, to string, lastDays int, granularity, fields, sort string, limit, offset int, timeZone string, returnRowTotals bool) adsReportPresetFlags {
+func reportPresetTestFlags(level, campaign, from, to string, lastDays int, timeZone string) adsReportPresetFlags {
+	adGroup := ""
+	granularity := "DAILY"
+	fields := ""
+	sort := ""
+	limit := 1000
+	offset := 0
+	returnRowTotals := false
 	return adsReportPresetFlags{
 		level:           &level,
 		campaign:        &campaign,

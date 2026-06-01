@@ -296,8 +296,18 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 		},
 		{
 			name:    "invalid time zone",
-			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--last-days", "1", "--time-zone", "Pacific/Atlantis", "--output", "json"},
-			wantErr: "--time-zone must be a valid IANA time zone",
+			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--last-days", "1", "--time-zone", "America/Los_Angeles", "--output", "json"},
+			wantErr: "--time-zone must be UTC or ORTZ",
+		},
+		{
+			name:    "last days require UTC",
+			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--last-days", "1", "--time-zone", "ORTZ", "--output", "json"},
+			wantErr: "--last-days requires --time-zone UTC",
+		},
+		{
+			name:    "search terms require ORTZ",
+			args:    []string{"ads", "reports", "preset", "--level", "search-terms", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--time-zone", "UTC", "--output", "json"},
+			wantErr: "--time-zone must be ORTZ for search-term report levels",
 		},
 		{
 			name:    "ad level requires sort",
