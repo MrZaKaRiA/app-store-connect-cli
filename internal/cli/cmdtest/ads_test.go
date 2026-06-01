@@ -202,6 +202,59 @@ func TestAdsReportsPresetBuildsScopedKeywordRequest(t *testing.T) {
 	}
 }
 
+func TestAdsReportsPresetBuildsAdLevelRequestWithSort(t *testing.T) {
+	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
+	t.Setenv("ASC_ADS_ORG_ID", "123456")
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.json"))
+
+	installDefaultTransport(t, adsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.Path != "/api/v5/reports/campaigns/12345/ads" {
+			t.Fatalf("request = %s %s, want ad report path", req.Method, req.URL.String())
+		}
+		var body struct {
+			Selector struct {
+				OrderBy []struct {
+					Field     string `json:"field"`
+					SortOrder string `json:"sortOrder"`
+				} `json:"orderBy"`
+			} `json:"selector"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if len(body.Selector.OrderBy) != 1 || body.Selector.OrderBy[0].Field != "impressions" || body.Selector.OrderBy[0].SortOrder != "DESCENDING" {
+			t.Fatalf("orderBy = %+v, want impressions descending", body.Selector.OrderBy)
+		}
+		return adsJSONResponse(200, `{"data":{"reportingDataResponse":{"row":[]}}}`), nil
+	}))
+
+	root := RootCommand("dev")
+	args := []string{
+		"ads", "reports", "preset",
+		"--level", "ads",
+		"--campaign", "12345",
+		"--from", "2026-05-01",
+		"--to", "2026-05-31",
+		"--sort", "impressions:desc",
+		"--output", "json",
+	}
+	if err := root.Parse(args); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	stdout, stderr := captureOutput(t, func() {
+		if err := root.Run(context.Background()); err != nil {
+			t.Fatalf("run error: %v", err)
+		}
+	})
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+}
+
 func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 	t.Setenv("ASC_ADS_ACCESS_TOKEN", "ACCESS")
 	t.Setenv("ASC_ADS_ORG_ID", "123456")
@@ -240,6 +293,16 @@ func TestAdsReportsPresetValidatesUsageBeforeNetwork(t *testing.T) {
 			name:    "invalid sort direction",
 			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--from", "2026-05-01", "--to", "2026-05-31", "--sort", "impressions:sideways", "--output", "json"},
 			wantErr: "--sort direction must be asc or desc",
+		},
+		{
+			name:    "invalid time zone",
+			args:    []string{"ads", "reports", "preset", "--level", "campaigns", "--last-days", "1", "--time-zone", "Pacific/Atlantis", "--output", "json"},
+			wantErr: "--time-zone must be a valid IANA time zone",
+		},
+		{
+			name:    "ad level requires sort",
+			args:    []string{"ads", "reports", "preset", "--level", "ads", "--campaign", "12345", "--from", "2026-05-01", "--to", "2026-05-31", "--output", "json"},
+			wantErr: "--sort is required for --level ads",
 		},
 	}
 
