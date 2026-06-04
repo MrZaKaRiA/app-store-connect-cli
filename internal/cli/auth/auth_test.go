@@ -760,7 +760,11 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 			if err := cmd.Exec(context.Background(), []string{}); err != nil {
 				t.Fatalf("Exec() error: %v", err)
 			}
-			expected := filepath.Join(repo, ".asc", "config.json")
+			expectedRepo := repo
+			if resolvedRepo, err := filepath.EvalSymlinks(repo); err == nil {
+				expectedRepo = resolvedRepo
+			}
+			expected := filepath.Join(expectedRepo, ".asc", "config.json")
 			if captured.ConfigPath != expected {
 				t.Fatalf("captured ConfigPath = %q, want %q", captured.ConfigPath, expected)
 			}
