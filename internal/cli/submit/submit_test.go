@@ -35,8 +35,8 @@ func TestSubmitCommandShape(t *testing.T) {
 	if cmd.Name != "submit" {
 		t.Fatalf("unexpected command name: %q", cmd.Name)
 	}
-	if len(cmd.Subcommands) != 4 {
-		t.Fatalf("expected 4 submit subcommands, got %d", len(cmd.Subcommands))
+	if len(cmd.Subcommands) != 2 {
+		t.Fatalf("expected 2 submit subcommands, got %d", len(cmd.Subcommands))
 	}
 	usage := cmd.UsageFunc(cmd)
 	for _, visible := range []string{"\n  status  ", "\n  cancel  "} {
@@ -46,36 +46,8 @@ func TestSubmitCommandShape(t *testing.T) {
 	}
 	for _, hidden := range []string{"\n  create  ", "\n  preflight  "} {
 		if strings.Contains(usage, hidden) {
-			t.Fatalf("expected submit help to hide removed subcommand %q, got %q", strings.TrimSpace(hidden), usage)
+			t.Fatalf("expected submit help to omit removed subcommand %q, got %q", strings.TrimSpace(hidden), usage)
 		}
-	}
-}
-
-func TestSubmitCreateCommand_MissingConfirm(t *testing.T) {
-	cmd := SubmitCreateCommand()
-	if err := cmd.FlagSet.Parse([]string{"--build", "BUILD_ID", "--version", "1.0.0", "--app", "123"}); err != nil {
-		t.Fatalf("failed to parse flags: %v", err)
-	}
-	if err := cmd.Exec(context.Background(), nil); !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("expected flag.ErrHelp, got %v", err)
-	}
-}
-
-func TestSubmitCreateCommand_MutuallyExclusiveVersionFlags(t *testing.T) {
-	cmd := SubmitCreateCommand()
-	args := []string{
-		"--confirm",
-		"--build", "BUILD_ID",
-		"--app", "123",
-		"--version", "1.0.0",
-		"--version-id", "VERSION_ID",
-	}
-	if err := cmd.FlagSet.Parse(args); err != nil {
-		t.Fatalf("failed to parse flags: %v", err)
-	}
-	err := cmd.Exec(context.Background(), nil)
-	if !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("expected flag.ErrHelp for mutually exclusive flags, got %v", err)
 	}
 }
 
