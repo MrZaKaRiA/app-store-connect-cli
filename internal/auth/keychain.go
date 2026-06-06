@@ -396,11 +396,21 @@ func MigrateKeychainToConfig(opts MigrateKeychainToConfigOptions) (MigrateKeycha
 	}
 
 	migratedConfigCreds := make([]config.Credential, 0, len(credentials))
+	seenConfigNames := make(map[string]string, len(credentials))
 	for _, cred := range credentials {
 		name := strings.TrimSpace(cred.Name)
 		if name == "" {
 			continue
 		}
+		if previousKeychainName, exists := seenConfigNames[name]; exists && previousKeychainName != cred.Name {
+			return result, fmt.Errorf(
+				"multiple keychain credentials normalize to config profile %q: %q and %q",
+				name,
+				previousKeychainName,
+				cred.Name,
+			)
+		}
+		seenConfigNames[name] = cred.Name
 		privateKeyPath, exported, err := migrationPrivateKeyPath(cred, privateKeyDir, name)
 		if err != nil {
 			return result, err

@@ -1327,6 +1327,39 @@ func TestMigrateKeychainToConfigRemovesOriginalSpacedKeychainName(t *testing.T) 
 	}
 }
 
+func TestMigrateKeychainToConfigRejectsTrimmedNameCollisions(t *testing.T) {
+	newKr, _ := withSeparateKeyrings(t)
+	configPath := os.Getenv("ASC_CONFIG_PATH")
+	if configPath == "" {
+		t.Fatal("expected ASC_CONFIG_PATH to be set")
+	}
+
+	keyPath := filepath.Join(t.TempDir(), "AuthKey.p8")
+	writeECDSAPEM(t, keyPath, 0o600, true)
+	storeCredentialInKeyring(t, newKr, "demo", "KEY123", "ISS456", keyPath)
+	storeCredentialInKeyring(t, newKr, " demo ", "KEY456", "ISS789", keyPath)
+
+	_, err := MigrateKeychainToConfig(MigrateKeychainToConfigOptions{
+		ConfigPath:     configPath,
+		RemoveKeychain: true,
+	})
+	if err == nil {
+		t.Fatal("expected trimmed name collision error")
+	}
+	if !strings.Contains(err.Error(), `normalize to config profile "demo"`) {
+		t.Fatalf("expected trimmed name collision error, got %v", err)
+	}
+	if _, err := config.LoadAt(configPath); !errors.Is(err, config.ErrNotFound) {
+		t.Fatalf("expected config to remain unwritten, got %v", err)
+	}
+	if _, err := newKr.Get(keyringKey("demo")); err != nil {
+		t.Fatalf("expected original demo keychain entry to remain, got %v", err)
+	}
+	if _, err := newKr.Get(keyringKey(" demo ")); err != nil {
+		t.Fatalf("expected original spaced keychain entry to remain, got %v", err)
+	}
+}
+
 func TestMigrateKeychainToConfigPreservesDestinationDefault(t *testing.T) {
 	newKr, _ := withSeparateKeyrings(t)
 	activeConfigPath := os.Getenv("ASC_CONFIG_PATH")
