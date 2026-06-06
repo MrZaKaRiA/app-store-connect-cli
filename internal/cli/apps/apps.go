@@ -79,7 +79,12 @@ Examples:
 		},
 		Exec: func(ctx context.Context, args []string) error {
 			if len(args) > 0 {
-				fmt.Fprintf(os.Stderr, "Error: unknown subcommand %q\n", strings.TrimSpace(args[0]))
+				subcommand := strings.TrimSpace(args[0])
+				if subcommand == "create" {
+					fmt.Fprintln(os.Stderr, "Error: `asc apps create` was removed. Use `asc web apps create` instead.")
+					return flag.ErrHelp
+				}
+				fmt.Fprintf(os.Stderr, "Error: unknown subcommand %q\n", subcommand)
 				return flag.ErrHelp
 			}
 			return appsList(ctx, *output.Output, *output.Pretty, *bundleID, *name, *sku, *sort, *limit, *next, *paginate)

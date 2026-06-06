@@ -4130,12 +4130,12 @@ func TestSubmitValidationErrors(t *testing.T) {
 		{
 			name:    "create removed",
 			args:    []string{"submit", "create", "--confirm"},
-			wantErr: "Submission lifecycle tools for App Store review.",
+			wantErr: "Error: `asc submit create` was removed. Use `asc publish appstore --submit` instead.",
 		},
 		{
 			name:    "preflight removed",
 			args:    []string{"submit", "preflight"},
-			wantErr: "Submission lifecycle tools for App Store review.",
+			wantErr: "Error: `asc submit preflight` was removed. Use `asc validate` instead.",
 		},
 	}
 
@@ -4368,7 +4368,7 @@ func TestAppsUpdateValidationErrors(t *testing.T) {
 		{
 			name:    "apps create removed",
 			args:    []string{"apps", "create"},
-			wantErr: "Error: unknown subcommand \"create\"",
+			wantErr: "Error: `asc apps create` was removed. Use `asc web apps create` instead.",
 		},
 		{
 			name:    "apps update missing id",
