@@ -1141,6 +1141,100 @@ func TestMigrateKeychainToConfigExportsMissingPrivateKeyPEM(t *testing.T) {
 	}
 }
 
+func TestMigrateKeychainToConfigDefaultsToActiveConfigPath(t *testing.T) {
+	newKr, _ := withSeparateKeyrings(t)
+	configPath := os.Getenv("ASC_CONFIG_PATH")
+	if configPath == "" {
+		t.Fatal("expected ASC_CONFIG_PATH to be set")
+	}
+
+	keyPath := filepath.Join(t.TempDir(), "AuthKey.p8")
+	writeECDSAPEM(t, keyPath, 0o600, true)
+	storeCredentialInKeyring(t, newKr, "demo", "KEY123", "ISS456", keyPath)
+
+	result, err := MigrateKeychainToConfig(MigrateKeychainToConfigOptions{})
+	if err != nil {
+		t.Fatalf("MigrateKeychainToConfig() error: %v", err)
+	}
+	if result.ConfigPath != configPath {
+		t.Fatalf("ConfigPath = %q, want active config path %q", result.ConfigPath, configPath)
+	}
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("config.LoadAt(active) error: %v", err)
+	}
+	if len(cfg.Keys) != 1 || cfg.Keys[0].Name != "demo" {
+		t.Fatalf("expected migrated credential in active config, got %#v", cfg.Keys)
+	}
+}
+
+func TestMigrateKeychainToConfigExportsCollidingProfileNames(t *testing.T) {
+	newKr, _ := withSeparateKeyrings(t)
+	configPath := os.Getenv("ASC_CONFIG_PATH")
+	if configPath == "" {
+		t.Fatal("expected ASC_CONFIG_PATH to be set")
+	}
+
+	sourceKeyPath := filepath.Join(t.TempDir(), "AuthKey-source.p8")
+	writeECDSAPEM(t, sourceKeyPath, 0o600, true)
+	privateKeyPEM, err := os.ReadFile(sourceKeyPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error: %v", sourceKeyPath, err)
+	}
+
+	for _, profile := range []struct {
+		name  string
+		keyID string
+	}{
+		{name: "prod", keyID: "KEY123"},
+		{name: "prod.", keyID: "KEY456"},
+	} {
+		item, err := keyringItemForCredential(profile.name, credentialPayload{
+			KeyID:          profile.keyID,
+			IssuerID:       "ISS456",
+			PrivateKeyPath: filepath.Join(t.TempDir(), profile.name, "missing.p8"),
+			PrivateKeyPEM:  string(privateKeyPEM),
+		})
+		if err != nil {
+			t.Fatalf("keyringItemForCredential(%q) error: %v", profile.name, err)
+		}
+		if err := newKr.Set(item); err != nil {
+			t.Fatalf("keyring Set(%q) error: %v", profile.name, err)
+		}
+	}
+
+	result, err := MigrateKeychainToConfig(MigrateKeychainToConfigOptions{
+		ConfigPath: configPath,
+	})
+	if err != nil {
+		t.Fatalf("MigrateKeychainToConfig() error: %v", err)
+	}
+	if len(result.Migrated) != 2 {
+		t.Fatalf("expected two migrated credentials, got %#v", result.Migrated)
+	}
+
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("config.LoadAt() error: %v", err)
+	}
+	if len(cfg.Keys) != 2 {
+		t.Fatalf("expected two config credentials, got %#v", cfg.Keys)
+	}
+	seen := map[string]struct{}{}
+	for _, cred := range cfg.Keys {
+		if cred.PrivateKeyPath == "" {
+			t.Fatalf("expected exported key path for %#v", cred)
+		}
+		if _, ok := seen[cred.PrivateKeyPath]; ok {
+			t.Fatalf("expected unique exported key path, got duplicate %q", cred.PrivateKeyPath)
+		}
+		seen[cred.PrivateKeyPath] = struct{}{}
+		if _, err := os.Stat(cred.PrivateKeyPath); err != nil {
+			t.Fatalf("expected exported key %q to exist: %v", cred.PrivateKeyPath, err)
+		}
+	}
+}
+
 func TestMigrateKeychainToConfigFailsWhenKeyMaterialIsMissing(t *testing.T) {
 	newKr, _ := withSeparateKeyrings(t)
 	configPath := os.Getenv("ASC_CONFIG_PATH")
@@ -1193,6 +1287,43 @@ func TestMigrateKeychainToConfigCanRemoveMigratedKeychainEntries(t *testing.T) {
 	}
 	if len(cfg.Keys) != 1 || cfg.Keys[0].Name != "demo" {
 		t.Fatalf("expected migrated config credential, got %#v", cfg.Keys)
+	}
+}
+
+func TestMigrateKeychainToConfigRemovesOriginalSpacedKeychainName(t *testing.T) {
+	newKr, _ := withSeparateKeyrings(t)
+	configPath := os.Getenv("ASC_CONFIG_PATH")
+	if configPath == "" {
+		t.Fatal("expected ASC_CONFIG_PATH to be set")
+	}
+
+	keyPath := filepath.Join(t.TempDir(), "AuthKey.p8")
+	writeECDSAPEM(t, keyPath, 0o600, true)
+	storeCredentialInKeyring(t, newKr, " demo ", "KEY123", "ISS456", keyPath)
+
+	result, err := MigrateKeychainToConfig(MigrateKeychainToConfigOptions{
+		ConfigPath:     configPath,
+		RemoveKeychain: true,
+	})
+	if err != nil {
+		t.Fatalf("MigrateKeychainToConfig() error: %v", err)
+	}
+	if !result.RemovedFromKeychain {
+		t.Fatalf("expected result to report keychain removal, got %#v", result)
+	}
+	if len(result.Migrated) != 1 || result.Migrated[0].Name != "demo" {
+		t.Fatalf("expected trimmed config profile name, got %#v", result.Migrated)
+	}
+	if _, err := newKr.Get(keyringKey(" demo ")); !errors.Is(err, keyring.ErrKeyNotFound) {
+		t.Fatalf("expected original spaced keychain entry to be removed, got %v", err)
+	}
+
+	cfg, err := config.LoadAt(configPath)
+	if err != nil {
+		t.Fatalf("config.LoadAt() error: %v", err)
+	}
+	if len(cfg.Keys) != 1 || cfg.Keys[0].Name != "demo" {
+		t.Fatalf("expected trimmed migrated config credential, got %#v", cfg.Keys)
 	}
 }
 

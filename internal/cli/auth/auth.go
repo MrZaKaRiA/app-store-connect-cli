@@ -58,13 +58,13 @@ Examples:
   asc auth status
   asc auth status --verbose
   asc auth switch --name work
-  asc auth migrate-to-config --confirm`,
+  asc auth export-to-config --confirm`,
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Subcommands: []*ffcli.Command{
 			AuthInitCommand(),
 			AuthLoginCommand(),
-			AuthMigrateToConfigCommand(),
+			AuthExportToConfigCommand(),
 			AuthSwitchCommand(),
 			AuthLogoutCommand(),
 			AuthDoctorCommand(),
@@ -532,9 +532,9 @@ so commands continue to work even if the original .p8 file is removed.`,
 	}
 }
 
-// AuthMigrateToConfigCommand copies keychain-backed credentials to config.json.
-func AuthMigrateToConfigCommand() *ffcli.Command {
-	fs := flag.NewFlagSet("auth migrate-to-config", flag.ExitOnError)
+// AuthExportToConfigCommand copies keychain-backed credentials to config.json.
+func AuthExportToConfigCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("auth export-to-config", flag.ExitOnError)
 
 	confirm := fs.Bool("confirm", false, "Confirm writing keychain credentials to config.json")
 	local := fs.Bool("local", false, "Write credentials to ./.asc/config.json in the current repo")
@@ -544,8 +544,8 @@ func AuthMigrateToConfigCommand() *ffcli.Command {
 	output := shared.BindOutputFlagsWithAllowed(fs, "output", "table", "Output format: table, json", "table", "json")
 
 	return &ffcli.Command{
-		Name:       "migrate-to-config",
-		ShortUsage: "asc auth migrate-to-config --confirm [flags]",
+		Name:       "export-to-config",
+		ShortUsage: "asc auth export-to-config --confirm [flags]",
 		ShortHelp:  "Copy keychain credentials into config.json.",
 		LongHelp: `Copy keychain credentials into config.json.
 
@@ -559,11 +559,11 @@ Use --remove-keychain to delete migrated keychain entries after config.json is
 written successfully. Otherwise keychain entries are left in place.
 
 Examples:
-  asc auth migrate-to-config --confirm
-  asc auth migrate-to-config --confirm --local
-  asc auth migrate-to-config --confirm --private-key-dir ~/.asc/keys
-  asc auth migrate-to-config --confirm --remove-keychain
-  asc auth migrate-to-config --confirm --output json`,
+  asc auth export-to-config --confirm
+  asc auth export-to-config --confirm --local
+  asc auth export-to-config --confirm --private-key-dir ~/.asc/keys
+  asc auth export-to-config --confirm --remove-keychain
+  asc auth export-to-config --confirm --output json`,
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {
@@ -592,15 +592,15 @@ Examples:
 				if *local {
 					targetConfigPath, err = config.LocalPath()
 				} else {
-					targetConfigPath, err = config.GlobalPath()
+					targetConfigPath, err = config.Path()
 				}
 				if err != nil {
-					return fmt.Errorf("auth migrate-to-config: %w", err)
+					return fmt.Errorf("auth export-to-config: %w", err)
 				}
 			} else {
 				targetConfigPath, err = filepath.Abs(targetConfigPath)
 				if err != nil {
-					return fmt.Errorf("auth migrate-to-config: invalid --config: %w", err)
+					return fmt.Errorf("auth export-to-config: invalid --config: %w", err)
 				}
 			}
 
@@ -610,7 +610,7 @@ Examples:
 				RemoveKeychain: *removeKeychain,
 			})
 			if err != nil {
-				return fmt.Errorf("auth migrate-to-config: %w", err)
+				return fmt.Errorf("auth export-to-config: %w", err)
 			}
 
 			if normalizedOutput == "json" {

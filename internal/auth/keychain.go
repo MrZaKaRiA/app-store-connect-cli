@@ -91,6 +91,7 @@ type MigratedCredential struct {
 	KeyID              string `json:"keyId"`
 	PrivateKeyPath     string `json:"privateKeyPath"`
 	ExportedPrivateKey bool   `json:"exportedPrivateKey,omitempty"`
+	keychainName       string
 }
 
 // MigrateKeychainToConfigResult summarizes a keychain-to-config migration.
@@ -400,7 +401,7 @@ func MigrateKeychainToConfig(opts MigrateKeychainToConfigOptions) (MigrateKeycha
 		if name == "" {
 			continue
 		}
-		privateKeyPath, exported, err := migrationPrivateKeyPath(cred, privateKeyDir)
+		privateKeyPath, exported, err := migrationPrivateKeyPath(cred, privateKeyDir, name)
 		if err != nil {
 			return result, err
 		}
@@ -417,6 +418,7 @@ func MigrateKeychainToConfig(opts MigrateKeychainToConfigOptions) (MigrateKeycha
 			KeyID:              configCred.KeyID,
 			PrivateKeyPath:     configCred.PrivateKeyPath,
 			ExportedPrivateKey: exported,
+			keychainName:       cred.Name,
 		})
 	}
 	if len(result.Migrated) == 0 {
@@ -431,7 +433,7 @@ func MigrateKeychainToConfig(opts MigrateKeychainToConfigOptions) (MigrateKeycha
 	if opts.RemoveKeychain {
 		removedAll := true
 		for _, cred := range result.Migrated {
-			if err := removeMigratedKeychainCredential(cred.Name); err != nil {
+			if err := removeMigratedKeychainCredential(cred.keychainName); err != nil {
 				removedAll = false
 				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove keychain credential %q: %v", cred.Name, err))
 			}
@@ -445,7 +447,7 @@ func MigrateKeychainToConfig(opts MigrateKeychainToConfigOptions) (MigrateKeycha
 func resolveMigrationConfigPath(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return config.GlobalPath()
+		return config.Path()
 	}
 	abs, err := filepath.Abs(raw)
 	if err != nil {
@@ -466,7 +468,7 @@ func resolveMigrationPrivateKeyDir(raw, configPath string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-func migrationPrivateKeyPath(cred Credential, privateKeyDir string) (string, bool, error) {
+func migrationPrivateKeyPath(cred Credential, privateKeyDir string, configName string) (string, bool, error) {
 	currentPath := strings.TrimSpace(cred.PrivateKeyPath)
 	if currentPath != "" {
 		info, err := os.Stat(currentPath)
@@ -489,14 +491,14 @@ func migrationPrivateKeyPath(cred Credential, privateKeyDir string) (string, boo
 		return "", false, fmt.Errorf("profile %q keychain private key PEM is invalid: %w", cred.Name, err)
 	}
 
-	exportPath := filepath.Join(privateKeyDir, migrationPrivateKeyFilename(cred.Name))
+	exportPath := filepath.Join(privateKeyDir, migrationPrivateKeyFilename(configName, cred.KeyID))
 	if err := writePrivateKeyPEMFile(exportPath, privateKeyPEM); err != nil {
 		return "", false, fmt.Errorf("profile %q failed to export private key: %w", cred.Name, err)
 	}
 	return exportPath, true, nil
 }
 
-func migrationPrivateKeyFilename(name string) string {
+func migrationPrivateKeyFilename(name, keyID string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "default"
@@ -519,6 +521,10 @@ func migrationPrivateKeyFilename(name string) string {
 	safe := strings.Trim(b.String(), "._-")
 	if safe == "" {
 		safe = "default"
+	}
+	keyID = strings.TrimSpace(keyID)
+	if keyID != "" {
+		return "AuthKey_" + safe + "_" + keyID + ".p8"
 	}
 	return "AuthKey_" + safe + ".p8"
 }

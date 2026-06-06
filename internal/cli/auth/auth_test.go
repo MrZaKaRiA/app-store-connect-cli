@@ -658,9 +658,9 @@ func TestAuthLogoutCommand(t *testing.T) {
 	})
 }
 
-func TestAuthMigrateToConfigCommand(t *testing.T) {
+func TestAuthExportToConfigCommand(t *testing.T) {
 	t.Run("requires confirm", func(t *testing.T) {
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{}); err != nil {
 			t.Fatalf("Parse() error: %v", err)
 		}
@@ -676,7 +676,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 	})
 
 	t.Run("invalid output format", func(t *testing.T) {
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{"--confirm", "--output", "yaml"}); err != nil {
 			t.Fatalf("Parse() error: %v", err)
 		}
@@ -692,7 +692,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 	})
 
 	t.Run("blank private key dir", func(t *testing.T) {
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{"--confirm", "--private-key-dir", "   "}); err != nil {
 			t.Fatalf("Parse() error: %v", err)
 		}
@@ -708,7 +708,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 	})
 
 	t.Run("blank config path", func(t *testing.T) {
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{"--confirm", "--config", "   "}); err != nil {
 			t.Fatalf("Parse() error: %v", err)
 		}
@@ -724,7 +724,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 	})
 
 	t.Run("local and config are mutually exclusive", func(t *testing.T) {
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{"--confirm", "--local", "--config", filepath.Join(t.TempDir(), "config.json")}); err != nil {
 			t.Fatalf("Parse() error: %v", err)
 		}
@@ -753,7 +753,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 			})
 			t.Cleanup(restore)
 
-			cmd := AuthMigrateToConfigCommand()
+			cmd := AuthExportToConfigCommand()
 			if err := cmd.FlagSet.Parse([]string{"--confirm", "--local"}); err != nil {
 				t.Fatalf("Parse() error: %v", err)
 			}
@@ -769,6 +769,33 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 				t.Fatalf("captured ConfigPath = %q, want %q", captured.ConfigPath, expected)
 			}
 		})
+	})
+
+	t.Run("default resolves active config path", func(t *testing.T) {
+		configPath := filepath.Join(t.TempDir(), "active-config.json")
+		t.Setenv("ASC_CONFIG_PATH", configPath)
+		var captured authsvc.MigrateKeychainToConfigOptions
+		restore := SetMigrateKeychainToConfig(func(opts authsvc.MigrateKeychainToConfigOptions) (authsvc.MigrateKeychainToConfigResult, error) {
+			captured = opts
+			return authsvc.MigrateKeychainToConfigResult{
+				ConfigPath: opts.ConfigPath,
+				Migrated: []authsvc.MigratedCredential{
+					{Name: "demo", KeyID: "KEY123", PrivateKeyPath: "/tmp/AuthKey.p8"},
+				},
+			}, nil
+		})
+		t.Cleanup(restore)
+
+		cmd := AuthExportToConfigCommand()
+		if err := cmd.FlagSet.Parse([]string{"--confirm"}); err != nil {
+			t.Fatalf("Parse() error: %v", err)
+		}
+		if err := cmd.Exec(context.Background(), []string{}); err != nil {
+			t.Fatalf("Exec() error: %v", err)
+		}
+		if captured.ConfigPath != configPath {
+			t.Fatalf("captured ConfigPath = %q, want active config path %q", captured.ConfigPath, configPath)
+		}
 	})
 
 	t.Run("json success", func(t *testing.T) {
@@ -792,7 +819,7 @@ func TestAuthMigrateToConfigCommand(t *testing.T) {
 		})
 		t.Cleanup(restore)
 
-		cmd := AuthMigrateToConfigCommand()
+		cmd := AuthExportToConfigCommand()
 		if err := cmd.FlagSet.Parse([]string{
 			"--confirm",
 			"--output", "json",
