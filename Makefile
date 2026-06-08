@@ -65,6 +65,13 @@ test:
 	@echo "$(BLUE)Running tests...$(NC)"
 	ASC_BYPASS_KEYCHAIN=1 $(GO) test -v ./...
 
+# Run tests with parallel package compilation
+# Defaults to GOMAXPROCS; set PARALLEL to override (e.g. PARALLEL=4)
+.PHONY: test-parallel
+test-parallel:
+	@echo "$(BLUE)Running tests (parallel=$(or $(PARALLEL),auto))...$(NC)"
+	ASC_BYPASS_KEYCHAIN=1 $(GO) test -v -count=1 $(if $(PARALLEL),-p=$(PARALLEL)) ./...
+
 # Run tests with coverage
 .PHONY: test-coverage
 test-coverage:
