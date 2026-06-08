@@ -178,6 +178,35 @@ func TestXcodeInjectDryRunDoesNotWriteFiles(t *testing.T) {
 	}
 }
 
+func TestXcodeInjectExpandsNestedPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"values": {
+			"version": "1.2.3",
+			"env": "${version}-beta"
+		},
+		"outputs": [
+			{
+				"type": "text",
+				"path": "Generated.xcconfig",
+				"contents": "APP_CHANNEL = ${env}\n"
+			}
+		]
+	}`)
+
+	if _, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath}); err != nil {
+		t.Fatalf("runXcodeInject() error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "Generated.xcconfig"))
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(data) != "APP_CHANNEL = 1.2.3-beta\n" {
+		t.Fatalf("expected nested placeholder expansion, got %q", string(data))
+	}
+}
+
 func TestXcodeInjectRejectsInvalidOutputType(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "deployment.json")

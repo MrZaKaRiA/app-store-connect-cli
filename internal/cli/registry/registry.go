@@ -20,7 +20,6 @@ import (
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/apps"
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/auth"
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/backgroundassets"
-	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/betabuildlocalizations"
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/buildbundles"
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/buildlocalizations"
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/builds"
@@ -159,7 +158,6 @@ func Subcommands(version string) []*ffcli.Command {
 		videopreviews.VideoPreviewsCommand(),
 		backgroundassets.BackgroundAssetsCommand(),
 		buildlocalizations.BuildLocalizationsCommand(),
-		betabuildlocalizations.BetaBuildLocalizationsCommand(),
 		sandbox.SandboxCommand(),
 		signing.SigningCommand(),
 		notarization.NotarizationCommand(),

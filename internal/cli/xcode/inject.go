@@ -311,12 +311,21 @@ func renderXcodeInjectValue(value any, values map[string]any) (any, error) {
 
 func renderXcodeInjectString(input string, values map[string]any) (string, error) {
 	rendered := input
-	for _, key := range sortedXcodeInjectValueKeys(values) {
-		placeholder := "${" + key + "}"
-		if !strings.Contains(rendered, placeholder) {
-			continue
+	for range len(values) + 1 {
+		before := rendered
+		for _, key := range sortedXcodeInjectValueKeys(values) {
+			placeholder := "${" + key + "}"
+			if !strings.Contains(rendered, placeholder) {
+				continue
+			}
+			rendered = strings.ReplaceAll(rendered, placeholder, fmt.Sprint(values[key]))
 		}
-		rendered = strings.ReplaceAll(rendered, placeholder, fmt.Sprint(values[key]))
+		if !strings.Contains(rendered, "${") {
+			return rendered, nil
+		}
+		if rendered == before {
+			break
+		}
 	}
 	if start := strings.Index(rendered, "${"); start != -1 {
 		if end := strings.Index(rendered[start+2:], "}"); end != -1 {
