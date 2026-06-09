@@ -13,7 +13,7 @@ import (
 	"github.com/rudrankriyam/App-Store-Connect-CLI/internal/cli/shared"
 )
 
-const defaultSkillsPackage = "rudrankriyam/asc-skills"
+const defaultSkillsPackage = "rorkai/app-store-connect-cli-skills"
 
 var (
 	lookupNpx      = exec.LookPath
