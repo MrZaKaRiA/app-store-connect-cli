@@ -51,7 +51,7 @@ func installSkills(ctx context.Context) error {
 	}
 
 	// `npx add-skill` is deprecated upstream; use the new subcommand style.
-	return runCommand(ctx, path, "--yes", "skills", "add", defaultSkillsPackage, "--global", "--yes")
+	return runCommand(ctx, path, "--yes", "skills", "add", defaultSkillsPackage, "--global", "--agent", "codex", "--yes")
 }
 
 func defaultRunCommand(ctx context.Context, name string, args ...string) error {

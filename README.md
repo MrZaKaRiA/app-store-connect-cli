@@ -43,7 +43,7 @@ asc install-skills
 Direct install:
 
 ```bash
-npx skills add rorkai/app-store-connect-cli-skills --global
+npx skills add rorkai/app-store-connect-cli-skills --global --agent codex
 ```
 
 ## Quick Start
