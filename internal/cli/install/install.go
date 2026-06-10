@@ -45,6 +45,9 @@ Examples:
 }
 
 func installSkills(ctx context.Context) error {
+	ctx, cancel := shared.ContextWithTimeout(ctx)
+	defer cancel()
+
 	path, err := lookupNpx("npx")
 	if err != nil {
 		return fmt.Errorf("%w; install Node.js to continue", errNpxNotFound)
