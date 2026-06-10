@@ -354,12 +354,8 @@ func writeXcodeInjectBytes(path, outputType, source string, payload []byte, opts
 		Source: source,
 		Bytes:  int64(len(payload)),
 	}
-	if !opts.Overwrite {
-		if _, err := os.Lstat(path); err == nil {
-			return xcodeInjectFileResult{}, newXcodeInjectUsageError("output path %q already exists; use --overwrite", path)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return xcodeInjectFileResult{}, err
-		}
+	if err := validateXcodeInjectDestination(path, opts.Overwrite); err != nil {
+		return xcodeInjectFileResult{}, err
 	}
 	if opts.DryRun {
 		if outputType == "copy" {
@@ -378,6 +374,26 @@ func writeXcodeInjectBytes(path, outputType, source string, payload []byte, opts
 		result.Action = "written"
 	}
 	return result, nil
+}
+
+func validateXcodeInjectDestination(path string, overwrite bool) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !overwrite {
+		return newXcodeInjectUsageError("output path %q already exists; use --overwrite", path)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to overwrite symlink %q", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("output path %q is a directory", path)
+	}
+	return nil
 }
 
 func resolveXcodeInjectPath(baseDir, path string) string {

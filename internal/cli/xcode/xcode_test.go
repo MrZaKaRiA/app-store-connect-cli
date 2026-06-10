@@ -170,6 +170,9 @@ func TestXcodeInjectDryRunDoesNotWriteFiles(t *testing.T) {
 	if !result.DryRun {
 		t.Fatal("expected dry_run result")
 	}
+	if len(result.Outputs) != 1 {
+		t.Fatalf("expected 1 output, got %d", len(result.Outputs))
+	}
 	if got := result.Outputs[0].Action; got != "would_write" {
 		t.Fatalf("expected would_write action, got %q", got)
 	}
@@ -204,6 +207,50 @@ func TestXcodeInjectDryRunRejectsExistingOutputWithoutOverwrite(t *testing.T) {
 	}
 	if string(data) != "OLD = yes\n" {
 		t.Fatalf("expected existing output preserved, got %q", string(data))
+	}
+}
+
+func TestXcodeInjectDryRunOverwriteRejectsSymlinkDestination(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "NEW = yes\n"}
+		]
+	}`)
+	targetPath := filepath.Join(dir, "Generated.xcconfig")
+	if err := os.Symlink(filepath.Join(dir, "real.xcconfig"), targetPath); err != nil {
+		t.Fatalf("Symlink() error: %v", err)
+	}
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, DryRun: true, Overwrite: true})
+	if err == nil {
+		t.Fatal("expected dry-run symlink destination error")
+	}
+	if !strings.Contains(err.Error(), "refusing to overwrite symlink") {
+		t.Fatalf("expected symlink refusal, got %v", err)
+	}
+}
+
+func TestXcodeInjectDryRunOverwriteRejectsDirectoryDestination(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "NEW = yes\n"}
+		]
+	}`)
+	targetPath := filepath.Join(dir, "Generated.xcconfig")
+	if err := os.Mkdir(targetPath, 0o755); err != nil {
+		t.Fatalf("Mkdir() error: %v", err)
+	}
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, DryRun: true, Overwrite: true})
+	if err == nil {
+		t.Fatal("expected dry-run directory destination error")
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("expected directory refusal, got %v", err)
 	}
 }
 
