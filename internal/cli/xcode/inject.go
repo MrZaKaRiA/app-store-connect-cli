@@ -226,17 +226,20 @@ func validateXcodeInjectOutputDestinations(baseDir string, outputs []xcodeInject
 		if targetPath == "" {
 			continue
 		}
-		targetKey := xcodeInjectPathConflictKey(targetPath)
-		if first, exists := seen[targetKey]; exists {
-			return newXcodeInjectUsageError("duplicate output path %q in outputs %d and %d", targetPath, first+1, i+1)
-		}
-		seen[targetKey] = i
 		if err := validateXcodeInjectDestinationParents(targetPath); err != nil {
 			return fmt.Errorf("output %d: %w", i+1, err)
 		}
 		if err := validateXcodeInjectDestination(targetPath, overwrite); err != nil {
 			return fmt.Errorf("output %d: %w", i+1, err)
 		}
+		targetKey, err := xcodeInjectPathConflictKey(targetPath)
+		if err != nil {
+			return fmt.Errorf("output %d: %w", i+1, err)
+		}
+		if first, exists := seen[targetKey]; exists {
+			return newXcodeInjectUsageError("duplicate output path %q in outputs %d and %d", targetPath, first+1, i+1)
+		}
+		seen[targetKey] = i
 		for index, existingPath := range paths {
 			existingKey := pathKeys[index]
 			if xcodeInjectPathContains(existingKey, targetKey) {
@@ -276,8 +279,29 @@ func validateXcodeInjectDestinationParents(path string) error {
 	}
 }
 
-func xcodeInjectPathConflictKey(path string) string {
-	return strings.ToLower(filepath.Clean(path))
+func xcodeInjectPathConflictKey(path string) (string, error) {
+	cleaned := filepath.Clean(path)
+	current := filepath.Dir(cleaned)
+	missing := []string{filepath.Base(cleaned)}
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			parts := append([]string{resolved}, missing...)
+			return strings.ToLower(filepath.Clean(filepath.Join(parts...))), nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+
+		parent := filepath.Dir(current)
+		missing = append([]string{filepath.Base(current)}, missing...)
+		if parent == current {
+			return strings.ToLower(cleaned), nil
+		}
+		current = parent
+	}
 }
 
 func xcodeInjectPathContains(parent, child string) bool {

@@ -476,6 +476,32 @@ func TestXcodeInjectAllowsDirectorySymlinkParent(t *testing.T) {
 	}
 }
 
+func TestXcodeInjectRejectsSymlinkedParentAliasDestinations(t *testing.T) {
+	dir := t.TempDir()
+	realDir := filepath.Join(dir, "SharedGenerated")
+	if err := os.Mkdir(realDir, 0o755); err != nil {
+		t.Fatalf("Mkdir() real parent error: %v", err)
+	}
+	if err := os.Symlink(realDir, filepath.Join(dir, "Generated")); err != nil {
+		t.Fatalf("Symlink() parent error: %v", err)
+	}
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated/Info.plist", "contents": "FIRST = yes\n"},
+			{"type": "text", "path": "SharedGenerated/Info.plist", "contents": "SECOND = yes\n"}
+		]
+	}`)
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, DryRun: true})
+	if err == nil {
+		t.Fatal("expected symlinked parent alias conflict error")
+	}
+	if !strings.Contains(err.Error(), "duplicate output path") {
+		t.Fatalf("expected duplicate destination guidance, got %v", err)
+	}
+}
+
 func TestXcodeInjectRejectsFileSymlinkParent(t *testing.T) {
 	dir := t.TempDir()
 	realFile := filepath.Join(dir, "SharedGenerated")
