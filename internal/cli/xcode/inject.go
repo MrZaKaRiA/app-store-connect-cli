@@ -185,11 +185,18 @@ func runXcodeInject(opts xcodeInjectOptions) (xcodeInjectResult, error) {
 		DryRun:       opts.DryRun,
 		Outputs:      make([]xcodeInjectFileResult, 0, len(manifest.Outputs)),
 	}
+	dryRunDestinations := map[string]struct{}{}
 
 	for i, output := range manifest.Outputs {
 		fileResult, err := renderXcodeInjectOutput(baseDir, values, output, opts)
 		if err != nil {
 			return xcodeInjectResult{}, fmt.Errorf("output %d: %w", i+1, err)
+		}
+		if opts.DryRun && !opts.Overwrite {
+			if _, exists := dryRunDestinations[fileResult.Path]; exists {
+				return xcodeInjectResult{}, fmt.Errorf("output %d: %w", i+1, newXcodeInjectUsageError("duplicate output path %q; use --overwrite", fileResult.Path))
+			}
+			dryRunDestinations[fileResult.Path] = struct{}{}
 		}
 		result.Outputs = append(result.Outputs, fileResult)
 	}

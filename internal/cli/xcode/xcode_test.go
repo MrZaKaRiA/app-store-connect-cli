@@ -254,6 +254,69 @@ func TestXcodeInjectDryRunOverwriteRejectsDirectoryDestination(t *testing.T) {
 	}
 }
 
+func TestXcodeInjectDryRunRejectsDuplicateDestinationsWithoutOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "FIRST = yes\n"},
+			{"type": "text", "path": "Generated.xcconfig", "contents": "SECOND = yes\n"}
+		]
+	}`)
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, DryRun: true})
+	if err == nil {
+		t.Fatal("expected duplicate dry-run destination error")
+	}
+	if !strings.Contains(err.Error(), "duplicate output path") {
+		t.Fatalf("expected duplicate destination guidance, got %v", err)
+	}
+}
+
+func TestXcodeInjectOverwriteRejectsSymlinkDestination(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "NEW = yes\n"}
+		]
+	}`)
+	targetPath := filepath.Join(dir, "Generated.xcconfig")
+	if err := os.Symlink(filepath.Join(dir, "real.xcconfig"), targetPath); err != nil {
+		t.Fatalf("Symlink() error: %v", err)
+	}
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, Overwrite: true})
+	if err == nil {
+		t.Fatal("expected symlink destination error")
+	}
+	if !strings.Contains(err.Error(), "refusing to overwrite symlink") {
+		t.Fatalf("expected symlink refusal, got %v", err)
+	}
+}
+
+func TestXcodeInjectOverwriteRejectsDirectoryDestination(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "NEW = yes\n"}
+		]
+	}`)
+	targetPath := filepath.Join(dir, "Generated.xcconfig")
+	if err := os.Mkdir(targetPath, 0o755); err != nil {
+		t.Fatalf("Mkdir() error: %v", err)
+	}
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, Overwrite: true})
+	if err == nil {
+		t.Fatal("expected directory destination error")
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("expected directory refusal, got %v", err)
+	}
+}
+
 func TestXcodeInjectExpandsNestedPlaceholders(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "deployment.json")
