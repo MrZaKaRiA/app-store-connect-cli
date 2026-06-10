@@ -276,6 +276,47 @@ func TestXcodeInjectRejectsDuplicateDestinationsBeforeWriting(t *testing.T) {
 	}
 }
 
+func TestXcodeInjectRejectsLaterRenderErrorBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "First.xcconfig", "contents": "FIRST = yes\n"},
+			{"type": "text", "path": "Second.xcconfig", "contents": "SECOND = ${missing}\n"}
+		]
+	}`)
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath})
+	if err == nil {
+		t.Fatal("expected missing placeholder error")
+	}
+	if !strings.Contains(err.Error(), `missing value for placeholder "missing"`) {
+		t.Fatalf("expected missing placeholder error, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "First.xcconfig")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected first output not to be written, stat error: %v", err)
+	}
+}
+
+func TestXcodeInjectRejectsLaterCopySourceErrorBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "First.xcconfig", "contents": "FIRST = yes\n"},
+			{"type": "copy", "source": "Missing/Contents.json", "path": "Copied/Contents.json"}
+		]
+	}`)
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath})
+	if err == nil {
+		t.Fatal("expected missing copy source error")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "First.xcconfig")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected first output not to be written, stat error: %v", err)
+	}
+}
+
 func TestXcodeInjectDryRunOverwriteRejectsDuplicateDestinations(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "deployment.json")

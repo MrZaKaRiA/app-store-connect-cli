@@ -54,6 +54,13 @@ type xcodeInjectFileResult struct {
 	Bytes  int64  `json:"bytes,omitempty"`
 }
 
+type xcodeInjectOutputPlan struct {
+	Type    string
+	Path    string
+	Source  string
+	Payload []byte
+}
+
 func XcodeInjectCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("xcode inject", flag.ExitOnError)
 
@@ -180,7 +187,7 @@ func runXcodeInject(opts xcodeInjectOptions) (xcodeInjectResult, error) {
 	}
 
 	baseDir := filepath.Dir(opts.ManifestPath)
-	if err := validateXcodeInjectOutputDestinations(baseDir, manifest.Outputs); err != nil {
+	if err := validateXcodeInjectOutputDestinations(baseDir, manifest.Outputs, opts.Overwrite); err != nil {
 		return xcodeInjectResult{}, err
 	}
 
@@ -189,9 +196,18 @@ func runXcodeInject(opts xcodeInjectOptions) (xcodeInjectResult, error) {
 		DryRun:       opts.DryRun,
 		Outputs:      make([]xcodeInjectFileResult, 0, len(manifest.Outputs)),
 	}
+	plans := make([]xcodeInjectOutputPlan, 0, len(manifest.Outputs))
 
 	for i, output := range manifest.Outputs {
-		fileResult, err := renderXcodeInjectOutput(baseDir, values, output, opts)
+		plan, err := planXcodeInjectOutput(baseDir, values, output)
+		if err != nil {
+			return xcodeInjectResult{}, fmt.Errorf("output %d: %w", i+1, err)
+		}
+		plans = append(plans, plan)
+	}
+
+	for i, plan := range plans {
+		fileResult, err := writeXcodeInjectBytes(plan.Path, plan.Type, plan.Source, plan.Payload, opts)
 		if err != nil {
 			return xcodeInjectResult{}, fmt.Errorf("output %d: %w", i+1, err)
 		}
@@ -201,7 +217,7 @@ func runXcodeInject(opts xcodeInjectOptions) (xcodeInjectResult, error) {
 	return result, nil
 }
 
-func validateXcodeInjectOutputDestinations(baseDir string, outputs []xcodeInjectManifestOutput) error {
+func validateXcodeInjectOutputDestinations(baseDir string, outputs []xcodeInjectManifestOutput, overwrite bool) error {
 	seen := map[string]int{}
 	for i, output := range outputs {
 		targetPath := resolveXcodeInjectPath(baseDir, strings.TrimSpace(output.Path))
@@ -212,6 +228,9 @@ func validateXcodeInjectOutputDestinations(baseDir string, outputs []xcodeInject
 			return newXcodeInjectUsageError("duplicate output path %q in outputs %d and %d", targetPath, first+1, i+1)
 		}
 		seen[targetPath] = i
+		if err := validateXcodeInjectDestination(targetPath, overwrite); err != nil {
+			return fmt.Errorf("output %d: %w", i+1, err)
+		}
 	}
 	return nil
 }
@@ -249,53 +268,53 @@ func applyXcodeInjectSetValues(values map[string]any, setValues []string) error 
 	return nil
 }
 
-func renderXcodeInjectOutput(baseDir string, values map[string]any, output xcodeInjectManifestOutput, opts xcodeInjectOptions) (xcodeInjectFileResult, error) {
+func planXcodeInjectOutput(baseDir string, values map[string]any, output xcodeInjectManifestOutput) (xcodeInjectOutputPlan, error) {
 	outputType := strings.ToLower(strings.TrimSpace(output.Type))
 	targetPath := resolveXcodeInjectPath(baseDir, strings.TrimSpace(output.Path))
 	if targetPath == "" {
-		return xcodeInjectFileResult{}, newXcodeInjectUsageError("path is required")
+		return xcodeInjectOutputPlan{}, newXcodeInjectUsageError("path is required")
 	}
 
 	switch outputType {
 	case "plist":
 		renderedValues, err := renderXcodeInjectValue(output.Values, values)
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
 		payload, err := plist.Marshal(renderedValues, plist.XMLFormat)
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
-		return writeXcodeInjectBytes(targetPath, outputType, "", payload, opts)
+		return xcodeInjectOutputPlan{Type: outputType, Path: targetPath, Payload: payload}, nil
 	case "json":
 		renderedValues, err := renderXcodeInjectValue(output.Values, values)
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
 		payload, err := json.MarshalIndent(renderedValues, "", "  ")
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
 		payload = append(payload, '\n')
-		return writeXcodeInjectBytes(targetPath, outputType, "", payload, opts)
+		return xcodeInjectOutputPlan{Type: outputType, Path: targetPath, Payload: payload}, nil
 	case "text":
 		renderedContents, err := renderXcodeInjectString(output.Contents, values)
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
-		return writeXcodeInjectBytes(targetPath, outputType, "", []byte(renderedContents), opts)
+		return xcodeInjectOutputPlan{Type: outputType, Path: targetPath, Payload: []byte(renderedContents)}, nil
 	case "copy":
 		sourcePath := resolveXcodeInjectPath(baseDir, strings.TrimSpace(output.Source))
 		if sourcePath == "" {
-			return xcodeInjectFileResult{}, newXcodeInjectUsageError("source is required for copy outputs")
+			return xcodeInjectOutputPlan{}, newXcodeInjectUsageError("source is required for copy outputs")
 		}
 		payload, err := os.ReadFile(sourcePath)
 		if err != nil {
-			return xcodeInjectFileResult{}, err
+			return xcodeInjectOutputPlan{}, err
 		}
-		return writeXcodeInjectBytes(targetPath, outputType, sourcePath, payload, opts)
+		return xcodeInjectOutputPlan{Type: outputType, Path: targetPath, Source: sourcePath, Payload: payload}, nil
 	default:
-		return xcodeInjectFileResult{}, newXcodeInjectUsageError("type must be one of plist, json, text, copy")
+		return xcodeInjectOutputPlan{}, newXcodeInjectUsageError("type must be one of plist, json, text, copy")
 	}
 }
 
