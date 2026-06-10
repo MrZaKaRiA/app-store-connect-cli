@@ -317,6 +317,31 @@ func TestXcodeInjectRejectsLaterCopySourceErrorBeforeWriting(t *testing.T) {
 	}
 }
 
+func TestXcodeInjectRejectsCopySourceFromManifestOutput(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "FIRST = yes\n"},
+			{"type": "copy", "source": "Generated.xcconfig", "path": "Copied.xcconfig"}
+		]
+	}`)
+	if err := os.WriteFile(filepath.Join(dir, "Generated.xcconfig"), []byte("STALE = yes\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() stale source error: %v", err)
+	}
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath, Overwrite: true})
+	if err == nil {
+		t.Fatal("expected copy source/output conflict error")
+	}
+	if !strings.Contains(err.Error(), "copy source") {
+		t.Fatalf("expected copy source guidance, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Copied.xcconfig")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected copy output not to be written, stat error: %v", err)
+	}
+}
+
 func TestXcodeInjectDryRunOverwriteRejectsDuplicateDestinations(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "deployment.json")
@@ -597,6 +622,27 @@ func TestXcodeInjectExpandsNestedPlaceholders(t *testing.T) {
 	}
 	if string(data) != "APP_CHANNEL = 1.2.3-beta\n" {
 		t.Fatalf("expected nested placeholder expansion, got %q", string(data))
+	}
+}
+
+func TestXcodeInjectRejectsUnclosedPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "deployment.json")
+	writeXcodeInjectTestManifest(t, manifestPath, `{
+		"outputs": [
+			{"type": "text", "path": "Generated.xcconfig", "contents": "APP_CHANNEL = ${env\n"}
+		]
+	}`)
+
+	_, err := runXcodeInject(xcodeInjectOptions{ManifestPath: manifestPath})
+	if err == nil {
+		t.Fatal("expected unclosed placeholder error")
+	}
+	if !strings.Contains(err.Error(), "unclosed placeholder") {
+		t.Fatalf("expected unclosed placeholder error, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Generated.xcconfig")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected output not to be written, stat error: %v", err)
 	}
 }
 

@@ -252,6 +252,19 @@ func validateXcodeInjectOutputDestinations(baseDir string, outputs []xcodeInject
 		paths = append(paths, targetPath)
 		pathKeys = append(pathKeys, targetKey)
 	}
+	for i, output := range outputs {
+		if strings.ToLower(strings.TrimSpace(output.Type)) != "copy" || strings.TrimSpace(output.Source) == "" {
+			continue
+		}
+		sourcePath := resolveXcodeInjectPath(baseDir, strings.TrimSpace(output.Source))
+		sourceKey, err := xcodeInjectPathConflictKey(sourcePath)
+		if err != nil {
+			return fmt.Errorf("output %d: %w", i+1, err)
+		}
+		if first, exists := seen[sourceKey]; exists {
+			return newXcodeInjectUsageError("copy source %q in output %d is produced by output %d", sourcePath, i+1, first+1)
+		}
+	}
 	return nil
 }
 
@@ -447,6 +460,7 @@ func renderXcodeInjectString(input string, values map[string]any) (string, error
 			name := rendered[start+2 : start+2+end]
 			return "", newXcodeInjectUsageError("missing value for placeholder %q", name)
 		}
+		return "", newXcodeInjectUsageError("unclosed placeholder in %q", rendered[start:])
 	}
 	return rendered, nil
 }
