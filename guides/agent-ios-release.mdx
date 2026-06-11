@@ -1,0 +1,199 @@
+# Agent iOS Release
+
+> Use `asc` for App Store submission before falling back to App Store Connect web UI
+
+This guide is for agents and release scripts that need to ship an iOS app
+without clicking through App Store Connect by hand. The goal is not just to run a
+command, but to prove the exact app version and build reached a real review
+state.
+
+## When to use this flow
+
+Use this flow when you need to:
+
+* upload an IPA and submit it for App Review
+* attach an already processed build to a new App Store version
+* copy or apply metadata before review
+* verify whether the submission is really `WAITING_FOR_REVIEW`
+
+Use the web UI only for Apple ID two-factor authentication, legal agreements,
+payment/account issues, CAPTCHA, government filing, or any App Store Connect
+surface that is not covered by public API or an explicit `asc web` command.
+
+## Safety rules for agents
+
+* Resolve IDs before mutating anything: app ID, version ID, build ID, and
+  submission ID when applicable.
+* Run `--help` for the command you plan to use; command surfaces can evolve.
+* Prefer `--dry-run` before `--confirm` where supported.
+* Never print API keys, private keys, passwords, phone numbers, or personal
+  identity values in logs or handoffs.
+* Do not report "submitted" until the CLI or App Store Connect shows a hard
+  review state for the exact version/build.
+
+## Resolve the target app, version, and build
+
+<Steps>
+  <Step title="Check authentication">
+    ```bash  theme={null}
+    asc auth status
+    ```
+  </Step>
+
+  <Step title="Resolve the app ID">
+    ```bash  theme={null}
+    asc apps list --bundle-id "com.example.app" --output table
+    ```
+
+    Or use `ASC_APP_ID` when the repository has a stable app target:
+
+    ```bash  theme={null}
+    export ASC_APP_ID="1234567890"
+    ```
+  </Step>
+
+  <Step title="Find or create the version">
+    ```bash  theme={null}
+    asc versions list --app "$ASC_APP_ID" --platform IOS --output json
+    asc versions create --app "$ASC_APP_ID" --version "1.2.3" --platform IOS
+    ```
+  </Step>
+
+  <Step title="Resolve the build">
+    ```bash  theme={null}
+    asc builds info \
+      --app "$ASC_APP_ID" \
+      --latest \
+      --version "1.2.3" \
+      --platform IOS \
+      --output json
+    ```
+  </Step>
+</Steps>
+
+## Validate before submission
+
+Run the release readiness check before staging or submitting:
+
+```bash  theme={null}
+asc validate \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --platform IOS \
+  --output table
+```
+
+For apps with digital goods, also validate product readiness:
+
+```bash  theme={null}
+asc validate iap --app "$ASC_APP_ID" --output table
+asc validate subscriptions --app "$ASC_APP_ID" --output table
+```
+
+Treat validation failures as blockers. Fix metadata, screenshots, review
+details, build processing, IAP, subscription, Game Center, or privacy issues
+before submission.
+
+## Stage metadata and build attachment
+
+Use `release stage` when you need to prepare the version but stop before review
+submission:
+
+```bash  theme={null}
+asc release stage \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --build "BUILD_ID" \
+  --metadata-dir "./metadata/version/1.2.3" \
+  --dry-run \
+  --output table
+```
+
+Apply the plan only after it names the intended version and build:
+
+```bash  theme={null}
+asc release stage \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --build "BUILD_ID" \
+  --metadata-dir "./metadata/version/1.2.3" \
+  --confirm
+```
+
+When carrying an existing listing forward, copy from the live version instead of
+rebuilding metadata by hand:
+
+```bash  theme={null}
+asc release stage \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --build "BUILD_ID" \
+  --copy-metadata-from "1.2.2" \
+  --confirm
+```
+
+## Submit for review
+
+Submit an already prepared version:
+
+```bash  theme={null}
+asc review submit \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --build "BUILD_ID" \
+  --dry-run \
+  --output table
+```
+
+```bash  theme={null}
+asc review submit \
+  --app "$ASC_APP_ID" \
+  --version "1.2.3" \
+  --build "BUILD_ID" \
+  --confirm
+```
+
+If the IPA is local and the user wants a single upload-and-submit flow:
+
+```bash  theme={null}
+asc publish appstore \
+  --app "$ASC_APP_ID" \
+  --ipa "./build/ios/ipa/MyApp.ipa" \
+  --version "1.2.3" \
+  --wait \
+  --submit \
+  --dry-run \
+  --output table
+```
+
+```bash  theme={null}
+asc publish appstore \
+  --app "$ASC_APP_ID" \
+  --ipa "./build/ios/ipa/MyApp.ipa" \
+  --version "1.2.3" \
+  --wait \
+  --submit \
+  --confirm
+```
+
+## Verify the final state
+
+Do not stop at a successful mutation response. Re-read the version or submission
+state:
+
+```bash  theme={null}
+asc submit status --version-id "VERSION_ID" --output table
+asc versions view --version-id "VERSION_ID" --output json
+```
+
+Successful handoffs should name:
+
+* app ID or bundle ID
+* version string
+* build number or build ID
+* submission ID when available
+* observed state such as `WAITING_FOR_REVIEW`, `IN_REVIEW`, or
+  `PENDING_DEVELOPER_RELEASE`
+
+If only a draft submission exists, report that as a draft. If a legal agreement
+or account-holder action blocks the flow, stop and say who must act.
