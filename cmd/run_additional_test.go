@@ -91,6 +91,24 @@ func TestRun_UnknownCommandReturnsUsage(t *testing.T) {
 	}
 }
 
+func TestRun_AlternativeDistributionAgreementsOpenInvalidAgreementReturnsUsage(t *testing.T) {
+	resetReportFlags(t)
+
+	_, stderr := captureCommandOutput(t, func() {
+		code := Run([]string{
+			"alternative-distribution", "agreements", "open",
+			"--agreement", "paid-apps",
+		}, "1.0.0")
+		if code != ExitUsage {
+			t.Fatalf("Run() exit code = %d, want %d", code, ExitUsage)
+		}
+	})
+
+	if !strings.Contains(stderr, `--agreement must be "eu-addendum"`) {
+		t.Fatalf("expected agreement validation in stderr, got %q", stderr)
+	}
+}
+
 func TestRun_RemovedTopLevelCommandsReturnUnknown(t *testing.T) {
 	resetReportFlags(t)
 

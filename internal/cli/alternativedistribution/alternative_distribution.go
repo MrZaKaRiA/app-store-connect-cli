@@ -19,6 +19,7 @@ func AlternativeDistributionCommand() *ffcli.Command {
 		LongHelp: `Manage alternative distribution resources.
 
 Examples:
+  asc alternative-distribution agreements open
   asc alternative-distribution domains list
   asc alternative-distribution domains create --domain "example.com" --reference-name "Example"
   asc alternative-distribution keys list
@@ -27,6 +28,7 @@ Examples:
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Subcommands: []*ffcli.Command{
+			AlternativeDistributionAgreementsCommand(),
 			AlternativeDistributionDomainsCommand(),
 			AlternativeDistributionKeysCommand(),
 			AlternativeDistributionPackagesCommand(),

@@ -4,8 +4,84 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io"
+	"os"
+	"strings"
 	"testing"
 )
+
+func TestAlternativeDistributionCommandIncludesAgreements(t *testing.T) {
+	cmd := AlternativeDistributionCommand()
+	if cmd == nil {
+		t.Fatal("expected alternative-distribution command")
+	}
+
+	for _, sub := range cmd.Subcommands {
+		if sub.Name == "agreements" {
+			return
+		}
+	}
+
+	t.Fatal("expected agreements subcommand")
+}
+
+func TestAlternativeDistributionAgreementsOpenCommandPrintsManualSigningHandoff(t *testing.T) {
+	cmd := AlternativeDistributionAgreementsOpenCommand()
+	if err := cmd.FlagSet.Parse([]string{}); err != nil {
+		t.Fatalf("failed to parse flags: %v", err)
+	}
+
+	stdout := captureStdout(t, func() {
+		if err := cmd.Exec(context.Background(), []string{}); err != nil {
+			t.Fatalf("Exec() error: %v", err)
+		}
+	})
+
+	if !strings.Contains(stdout, alternativeDistributionAgreementsURL) {
+		t.Fatalf("expected stdout to include agreements URL, got %q", stdout)
+	}
+	if !strings.Contains(stdout, "does not accept or sign") {
+		t.Fatalf("expected stdout to clarify manual signing, got %q", stdout)
+	}
+}
+
+func TestAlternativeDistributionAgreementsOpenCommandRejectsUnsupportedAgreement(t *testing.T) {
+	cmd := AlternativeDistributionAgreementsOpenCommand()
+	if err := cmd.FlagSet.Parse([]string{"--agreement", "paid-apps"}); err != nil {
+		t.Fatalf("failed to parse flags: %v", err)
+	}
+
+	if err := cmd.Exec(context.Background(), []string{}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("expected flag.ErrHelp for unsupported agreement, got %v", err)
+	}
+}
+
+func TestAlternativeDistributionAgreementsOpenCommandBrowserUsesAgreementsURL(t *testing.T) {
+	var openedURL string
+	prevOpen := openAgreementURL
+	openAgreementURL = func(ctx context.Context, rawURL string) error {
+		openedURL = rawURL
+		return nil
+	}
+	t.Cleanup(func() {
+		openAgreementURL = prevOpen
+	})
+
+	cmd := AlternativeDistributionAgreementsOpenCommand()
+	if err := cmd.FlagSet.Parse([]string{"--browser"}); err != nil {
+		t.Fatalf("failed to parse flags: %v", err)
+	}
+
+	_ = captureStdout(t, func() {
+		if err := cmd.Exec(context.Background(), []string{}); err != nil {
+			t.Fatalf("Exec() error: %v", err)
+		}
+	})
+
+	if openedURL != alternativeDistributionAgreementsURL {
+		t.Fatalf("opened URL = %q, want %q", openedURL, alternativeDistributionAgreementsURL)
+	}
+}
 
 func TestAlternativeDistributionDomainsGetCommand_MissingID(t *testing.T) {
 	cmd := AlternativeDistributionDomainsGetCommand()
@@ -218,6 +294,37 @@ func TestAlternativeDistributionPackageVersionsGetCommand_MissingID(t *testing.T
 	if err := cmd.Exec(context.Background(), []string{}); !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected flag.ErrHelp when --version-id is missing, got %v", err)
 	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error: %v", err)
+	}
+
+	os.Stdout = w
+	defer func() {
+		os.Stdout = originalStdout
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stdout pipe: %v", err)
+	}
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stdout pipe: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("close stdout reader: %v", err)
+	}
+
+	return string(data)
 }
 
 func TestAlternativeDistributionPackageVersionsListCommand_MissingID(t *testing.T) {
