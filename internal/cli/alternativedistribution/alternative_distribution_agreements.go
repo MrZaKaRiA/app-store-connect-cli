@@ -19,8 +19,10 @@ const (
 	alternativeDistributionAgreementsURL       = "https://appstoreconnect.apple.com/agreements/#/"
 )
 
-var openAgreementURL = openURL
-var openURLCommand = exec.CommandContext
+var (
+	openAgreementURL = openURL
+	openURLCommand   = exec.CommandContext
+)
 
 // AlternativeDistributionAgreementsCommand returns the agreements command group.
 func AlternativeDistributionAgreementsCommand() *ffcli.Command {
