@@ -266,13 +266,13 @@ func WebSubscriptionsPricingAdjustedEqualizationsCommand() *ffcli.Command {
 func WebSubscriptionsPricingAdjustedEqualizationsViewCommand() *ffcli.Command {
 	fs := flag.NewFlagSet("web subscriptions pricing adjusted-equalizations view", flag.ExitOnError)
 	pricePointID := fs.String("price-point-id", "", "Subscription price point ID")
-	planType := fs.String("plan-type", "MONTHLY", "Plan type: MONTHLY or UPFRONT")
+	planType := fs.String("plan-type", "MONTHLY", "Plan type (MONTHLY only)")
 	authFlags := bindWebSessionFlags(fs)
 	output := shared.BindOutputFlags(fs)
 	return &ffcli.Command{
 		Name:       "view",
-		ShortUsage: "asc web subscriptions pricing adjusted-equalizations view --price-point-id PRICE_POINT_ID [--plan-type MONTHLY|UPFRONT] [flags]",
-		ShortHelp:  "[experimental] View a generated adjusted subscription price matrix.",
+		ShortUsage: "asc web subscriptions pricing adjusted-equalizations view --price-point-id PRICE_POINT_ID [--plan-type MONTHLY] [flags]",
+		ShortHelp:  "[experimental] View a generated MONTHLY subscription price matrix.",
 		FlagSet:    fs, UsageFunc: shared.DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {
 			if len(args) > 0 {
@@ -283,8 +283,8 @@ func WebSubscriptionsPricingAdjustedEqualizationsViewCommand() *ffcli.Command {
 			if id == "" {
 				return shared.UsageError("--price-point-id is required")
 			}
-			if normalizedPlanType != "MONTHLY" && normalizedPlanType != "UPFRONT" {
-				return shared.UsageError(`--plan-type must be "MONTHLY" or "UPFRONT"`)
+			if normalizedPlanType != "MONTHLY" {
+				return shared.UsageError(`--plan-type only supports "MONTHLY"; Apple's private endpoint rejects UPFRONT`)
 			}
 			requestCtx, cancel := shared.ContextWithTimeout(ctx)
 			defer cancel()

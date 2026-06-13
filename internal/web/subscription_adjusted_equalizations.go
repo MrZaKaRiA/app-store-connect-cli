@@ -54,8 +54,8 @@ func (c *Client) GetSubscriptionAdjustedEqualizations(ctx context.Context, price
 		return nil, fmt.Errorf("subscription price point id is required")
 	}
 	planType = strings.ToUpper(strings.TrimSpace(planType))
-	if planType != "MONTHLY" && planType != "UPFRONT" {
-		return nil, fmt.Errorf(`plan type must be "MONTHLY" or "UPFRONT"`)
+	if planType != "MONTHLY" {
+		return nil, fmt.Errorf(`plan type must be "MONTHLY"`)
 	}
 
 	query := url.Values{}

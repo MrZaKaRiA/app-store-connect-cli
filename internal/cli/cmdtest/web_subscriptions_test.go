@@ -522,6 +522,91 @@ func TestWebSubscriptionsPricingMonthlyCommitmentBootstrapUsageExitCodes(t *test
 	}
 }
 
+func TestWebSubscriptionsPricingAdjustedEqualizationsViewRun(t *testing.T) {
+	restoreSession := webcmd.SetResolveWebSession(func(ctx context.Context, appleID, password, twoFactorCode string) (*webcore.AuthSession, string, error) {
+		return &webcore.AuthSession{
+			Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.Method != http.MethodGet || req.URL.Path != "/iris/v1/subscriptionPricePoints/monthly-point/adjustedEqualizations" {
+					t.Fatalf("unexpected adjusted equalizations request: %s %s", req.Method, req.URL.String())
+				}
+				if got := req.URL.Query().Get("filter[planType]"); got != "MONTHLY" {
+					t.Fatalf("expected MONTHLY plan type, got %q", got)
+				}
+				return &http.Response{
+					StatusCode: http.StatusConflict,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(strings.NewReader(
+						`{"errors":[{"code":"STATE_ERROR.EQUALIZATION_FAILED","detail":"No compatible price point","meta":{"associatedErrors":{"prices":[{"code":"STATE_ERROR.NO_TIER_IN_TERRITORY","detail":"DEU"}]}}}]}`,
+					)),
+				}, nil
+			})},
+		}, "cache", nil
+	})
+	t.Cleanup(restoreSession)
+
+	stdout, stderr := captureOutput(t, func() {
+		code := cmd.Run([]string{
+			"web", "subscriptions", "pricing", "adjusted-equalizations", "view",
+			"--price-point-id", "monthly-point",
+			"--plan-type", "MONTHLY",
+			"--output", "json",
+		}, "1.0.0")
+		if code != cmd.ExitSuccess {
+			t.Fatalf("exit code = %d, want %d", code, cmd.ExitSuccess)
+		}
+	})
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	var payload struct {
+		PlanType              string   `json:"planType"`
+		Status                int      `json:"status"`
+		Available             bool     `json:"available"`
+		Code                  string   `json:"code"`
+		MissingTerritoryCount int      `json:"missingTerritoryCount"`
+		MissingTerritories    []string `json:"missingTerritories"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error: %v; stdout=%q", err, stdout)
+	}
+	if payload.PlanType != "MONTHLY" || payload.Status != http.StatusConflict || payload.Available {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.Code != "STATE_ERROR.EQUALIZATION_FAILED" || payload.MissingTerritoryCount != 1 ||
+		len(payload.MissingTerritories) != 1 || payload.MissingTerritories[0] != "DEU" {
+		t.Fatalf("unexpected equalization failure details: %+v", payload)
+	}
+}
+
+func TestWebSubscriptionsPricingAdjustedEqualizationsRejectsUpfrontPlanType(t *testing.T) {
+	binaryPath := buildASCBlackBoxBinary(t)
+	command := exec.Command(
+		binaryPath,
+		"web", "subscriptions", "pricing", "adjusted-equalizations", "view",
+		"--price-point-id", "upfront-point",
+		"--plan-type", "UPFRONT",
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+
+	err := command.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected process exit error, got %v", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitErr.ExitCode())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), `--plan-type only supports "MONTHLY"`) {
+		t.Fatalf("expected MONTHLY-only error, got %q", stderr.String())
+	}
+}
+
 func webSubscriptionsAvailabilityResponse(t *testing.T, req *http.Request, availabilityListCalls *int, patchCalls *int, postPatchRemoved ...bool) (*http.Response, error) {
 	t.Helper()
 

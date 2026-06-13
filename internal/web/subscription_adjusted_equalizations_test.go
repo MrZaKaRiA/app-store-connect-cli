@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -25,5 +26,13 @@ func TestGetSubscriptionAdjustedEqualizationsSanitizesKnownConflict(t *testing.T
 	}
 	if len(result.MissingTerritories) != 2 || result.MissingTerritories[0] != "DEU" || result.MissingTerritories[1] != "FRA" {
 		t.Fatalf("unexpected territories: %#v", result.MissingTerritories)
+	}
+}
+
+func TestGetSubscriptionAdjustedEqualizationsRejectsUpfrontPlanType(t *testing.T) {
+	client := &Client{}
+	_, err := client.GetSubscriptionAdjustedEqualizations(context.Background(), "point-1", "UPFRONT")
+	if err == nil || !strings.Contains(err.Error(), `plan type must be "MONTHLY"`) {
+		t.Fatalf("expected MONTHLY-only error, got %v", err)
 	}
 }
