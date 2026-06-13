@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 
@@ -20,16 +21,28 @@ var (
 	createWebSubscriptionPlanPricesFn = func(ctx context.Context, client *webcore.Client, subscriptionID, upfrontPricePointID, monthlyPricePointID string) (*webcore.SubscriptionPlanPricesResult, error) {
 		return client.CreateSubscriptionPlanPrices(ctx, subscriptionID, upfrontPricePointID, monthlyPricePointID)
 	}
+	setWebSubscriptionPlanPricesFn = func(ctx context.Context, client *webcore.Client, subscriptionID string, prices []webcore.SubscriptionPlanPrice) (*webcore.SubscriptionPlanPricesResult, error) {
+		return client.SetSubscriptionPlanPrices(ctx, subscriptionID, prices)
+	}
+	resolveWebSubscriptionPricePointFn = func(ctx context.Context, client *webcore.Client, subscriptionID, territory, customerPrice string) (*webcore.SubscriptionPricePoint, error) {
+		return client.ResolveSubscriptionPricePoint(ctx, subscriptionID, territory, customerPrice)
+	}
+	getWebSubscriptionAdjustedEqualizationsFn = func(ctx context.Context, client *webcore.Client, pricePointID, planType string) (*webcore.SubscriptionAdjustedEqualizationsResult, error) {
+		return client.GetSubscriptionAdjustedEqualizations(ctx, pricePointID, planType)
+	}
 )
 
 type webSubscriptionMonthlyCommitmentBootstrapResult struct {
-	SubscriptionID      string `json:"subscriptionId"`
-	Territory           string `json:"territory"`
-	PlanAvailabilityID  string `json:"planAvailabilityId"`
-	PlanAvailabilityNew bool   `json:"planAvailabilityCreated"`
-	UpfrontPricePointID string `json:"upfrontPricePointId"`
-	MonthlyPricePointID string `json:"monthlyPricePointId"`
-	PricesCreated       bool   `json:"pricesCreated"`
+	SubscriptionID       string `json:"subscriptionId"`
+	Territory            string `json:"territory"`
+	PlanAvailabilityID   string `json:"planAvailabilityId"`
+	PlanAvailabilityNew  bool   `json:"planAvailabilityCreated"`
+	UpfrontPricePointID  string `json:"upfrontPricePointId"`
+	MonthlyPricePointID  string `json:"monthlyPricePointId"`
+	PricesCreated        bool   `json:"pricesCreated"`
+	DryRun               bool   `json:"dryRun"`
+	StartDate            string `json:"startDate,omitempty"`
+	PreserveCurrentPrice bool   `json:"preserveCurrentPrice,omitempty"`
 }
 
 // WebSubscriptionsPricingCommand returns the web subscription pricing command group.
@@ -48,6 +61,7 @@ Manage subscription pricing through Apple's internal web API.
 		FlagSet:   fs,
 		UsageFunc: shared.DefaultUsageFunc,
 		Subcommands: []*ffcli.Command{
+			WebSubscriptionsPricingAdjustedEqualizationsCommand(),
 			WebSubscriptionsPricingMonthlyCommitmentCommand(),
 		},
 		Exec: func(ctx context.Context, args []string) error {
@@ -88,20 +102,27 @@ func WebSubscriptionsPricingMonthlyCommitmentBootstrapCommand() *ffcli.Command {
 	territory := fs.String("territory", "", "Three-letter territory ID, for example NOR")
 	upfrontPricePointID := fs.String("upfront-price-point-id", "", "UPFRONT subscription price point ID")
 	monthlyPricePointID := fs.String("monthly-price-point-id", "", "MONTHLY subscription price point ID")
+	upfrontPrice := fs.String("upfront-price", "", "UPFRONT customer price to resolve in --territory")
+	monthlyPrice := fs.String("monthly-price", "", "MONTHLY customer price to resolve in --territory")
+	startDate := fs.String("start-date", "", "Schedule both prices on YYYY-MM-DD")
+	preserveCurrentPrice := fs.Bool("preserve-current-price", false, "Preserve current pricing for existing subscribers")
+	dryRun := fs.Bool("dry-run", false, "Resolve and print the plan without creating or changing resources")
 	confirm := fs.Bool("confirm", false, "Confirm creating monthly availability and paired prices")
 	authFlags := bindWebSessionFlags(fs)
 	output := shared.BindOutputFlags(fs)
 
 	return &ffcli.Command{
 		Name:       "bootstrap",
-		ShortUsage: "asc web subscriptions pricing monthly-commitment bootstrap --subscription-id SUB_ID --territory NOR --upfront-price-point-id ID --monthly-price-point-id ID --confirm [flags]",
+		ShortUsage: "asc web subscriptions pricing monthly-commitment bootstrap --subscription-id SUB_ID --territory NOR (--upfront-price PRICE | --upfront-price-point-id ID) (--monthly-price PRICE | --monthly-price-point-id ID) [--dry-run | --confirm] [flags]",
 		ShortHelp:  "[experimental] Create monthly plan availability and paired prices.",
 		LongHelp: `EXPERIMENTAL / UNOFFICIAL / DISCOURAGED
 
 Create MONTHLY plan availability, then attach paired UPFRONT and MONTHLY prices
 using the same private inline subscription PATCH as App Store Connect.
 
-Run once per base territory. Price point IDs must belong to the selected territory.
+Prices may be supplied as exact customer prices or price point IDs. Use
+--start-date for a scheduled paired price change. --dry-run performs all reads
+and price resolution but does not mutate App Store Connect.
 
 ` + webWarningText,
 		FlagSet:   fs,
@@ -114,17 +135,25 @@ Run once per base territory. Price point IDs must belong to the selected territo
 			territoryID := strings.ToUpper(strings.TrimSpace(*territory))
 			upfrontID := strings.TrimSpace(*upfrontPricePointID)
 			monthlyID := strings.TrimSpace(*monthlyPricePointID)
+			upfrontAmount := strings.TrimSpace(*upfrontPrice)
+			monthlyAmount := strings.TrimSpace(*monthlyPrice)
+			scheduledDate := strings.TrimSpace(*startDate)
 			switch {
 			case id == "":
 				return shared.UsageError("--subscription-id is required")
 			case len(territoryID) != 3:
 				return shared.UsageError("--territory must be a three-letter territory ID")
-			case upfrontID == "":
-				return shared.UsageError("--upfront-price-point-id is required")
-			case monthlyID == "":
-				return shared.UsageError("--monthly-price-point-id is required")
-			case !*confirm:
+			case (upfrontID == "") == (upfrontAmount == ""):
+				return shared.UsageError("exactly one of --upfront-price or --upfront-price-point-id is required")
+			case (monthlyID == "") == (monthlyAmount == ""):
+				return shared.UsageError("exactly one of --monthly-price or --monthly-price-point-id is required")
+			case !*dryRun && !*confirm:
 				return shared.UsageError("--confirm is required")
+			}
+			if scheduledDate != "" {
+				if _, err := time.Parse("2006-01-02", scheduledDate); err != nil {
+					return shared.UsageError("--start-date must use YYYY-MM-DD")
+				}
 			}
 
 			requestCtx, cancel := shared.ContextWithTimeout(ctx)
@@ -134,6 +163,20 @@ Run once per base territory. Price point IDs must belong to the selected territo
 				return err
 			}
 			client := newWebClientFn(session)
+			if upfrontAmount != "" {
+				point, err := resolveWebSubscriptionPricePointFn(requestCtx, client, id, territoryID, upfrontAmount)
+				if err != nil {
+					return fmt.Errorf("resolve upfront price: %w", err)
+				}
+				upfrontID = point.ID
+			}
+			if monthlyAmount != "" {
+				point, err := resolveWebSubscriptionPricePointFn(requestCtx, client, id, territoryID, monthlyAmount)
+				if err != nil {
+					return fmt.Errorf("resolve monthly price: %w", err)
+				}
+				monthlyID = point.ID
+			}
 
 			availabilities, err := listWebSubscriptionPlanAvailabilitiesFn(requestCtx, client, id)
 			if err != nil {
@@ -141,6 +184,17 @@ Run once per base territory. Price point IDs must belong to the selected territo
 			}
 			monthlyAvailability, found := findPlanAvailabilityByType(availabilities, "MONTHLY")
 			created := false
+			if *dryRun {
+				result := webSubscriptionMonthlyCommitmentBootstrapResult{
+					SubscriptionID: id, Territory: territoryID,
+					PlanAvailabilityID:  monthlyAvailability.ID,
+					PlanAvailabilityNew: !found,
+					UpfrontPricePointID: upfrontID, MonthlyPricePointID: monthlyID,
+					DryRun: true, StartDate: scheduledDate,
+					PreserveCurrentPrice: *preserveCurrentPrice,
+				}
+				return shared.PrintOutput(result, *output.Output, *output.Pretty)
+			}
 			if !found {
 				monthlyAvailability, err = dereferencePlanAvailability(createWebSubscriptionPlanAvailabilityFn(requestCtx, client, id, "MONTHLY", []string{territoryID}, false))
 				if err != nil {
@@ -151,18 +205,28 @@ Run once per base territory. Price point IDs must belong to the selected territo
 				return fmt.Errorf("MONTHLY plan availability %q exists but does not include %s; update its territories before bootstrapping prices", monthlyAvailability.ID, territoryID)
 			}
 
-			prices, err := createWebSubscriptionPlanPricesFn(requestCtx, client, id, upfrontID, monthlyID)
+			var prices *webcore.SubscriptionPlanPricesResult
+			if scheduledDate == "" {
+				prices, err = createWebSubscriptionPlanPricesFn(requestCtx, client, id, upfrontID, monthlyID)
+			} else {
+				prices, err = setWebSubscriptionPlanPricesFn(requestCtx, client, id, []webcore.SubscriptionPlanPrice{
+					{PlanType: "UPFRONT", PricePointID: upfrontID, StartDate: scheduledDate, PreserveCurrentPrice: *preserveCurrentPrice},
+					{PlanType: "MONTHLY", PricePointID: monthlyID, StartDate: scheduledDate, PreserveCurrentPrice: *preserveCurrentPrice},
+				})
+			}
 			if err != nil {
 				return fmt.Errorf("monthly availability ready, but paired price creation failed: %w", err)
 			}
 			result := webSubscriptionMonthlyCommitmentBootstrapResult{
-				SubscriptionID:      id,
-				Territory:           territoryID,
-				PlanAvailabilityID:  monthlyAvailability.ID,
-				PlanAvailabilityNew: created,
-				UpfrontPricePointID: prices.UpfrontPricePointID,
-				MonthlyPricePointID: prices.MonthlyPricePointID,
-				PricesCreated:       true,
+				SubscriptionID:       id,
+				Territory:            territoryID,
+				PlanAvailabilityID:   monthlyAvailability.ID,
+				PlanAvailabilityNew:  created,
+				UpfrontPricePointID:  prices.UpfrontPricePointID,
+				MonthlyPricePointID:  prices.MonthlyPricePointID,
+				PricesCreated:        true,
+				StartDate:            scheduledDate,
+				PreserveCurrentPrice: *preserveCurrentPrice,
 			}
 			return shared.PrintOutputWithRenderers(
 				result,
@@ -171,6 +235,57 @@ Run once per base territory. Price point IDs must belong to the selected territo
 				func() error { return renderWebMonthlyCommitmentBootstrapTable(result) },
 				func() error { return renderWebMonthlyCommitmentBootstrapMarkdown(result) },
 			)
+		},
+	}
+}
+
+// WebSubscriptionsPricingAdjustedEqualizationsCommand returns the adjusted equalizations group.
+func WebSubscriptionsPricingAdjustedEqualizationsCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("web subscriptions pricing adjusted-equalizations", flag.ExitOnError)
+	return &ffcli.Command{
+		Name: "adjusted-equalizations", ShortUsage: "asc web subscriptions pricing adjusted-equalizations view [flags]",
+		ShortHelp: "[experimental] Inspect Apple's adjusted subscription price matrix.",
+		FlagSet:   fs, UsageFunc: shared.DefaultUsageFunc,
+		Subcommands: []*ffcli.Command{WebSubscriptionsPricingAdjustedEqualizationsViewCommand()},
+		Exec:        func(ctx context.Context, args []string) error { return flag.ErrHelp },
+	}
+}
+
+// WebSubscriptionsPricingAdjustedEqualizationsViewCommand inspects one price point.
+func WebSubscriptionsPricingAdjustedEqualizationsViewCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("web subscriptions pricing adjusted-equalizations view", flag.ExitOnError)
+	pricePointID := fs.String("price-point-id", "", "Subscription price point ID")
+	planType := fs.String("plan-type", "MONTHLY", "Plan type: MONTHLY or UPFRONT")
+	authFlags := bindWebSessionFlags(fs)
+	output := shared.BindOutputFlags(fs)
+	return &ffcli.Command{
+		Name:       "view",
+		ShortUsage: "asc web subscriptions pricing adjusted-equalizations view --price-point-id PRICE_POINT_ID [--plan-type MONTHLY|UPFRONT] [flags]",
+		ShortHelp:  "[experimental] View a generated adjusted subscription price matrix.",
+		FlagSet:    fs, UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			if len(args) > 0 {
+				return shared.UsageError("web subscriptions pricing adjusted-equalizations view does not accept positional arguments")
+			}
+			id := strings.TrimSpace(*pricePointID)
+			normalizedPlanType := strings.ToUpper(strings.TrimSpace(*planType))
+			if id == "" {
+				return shared.UsageError("--price-point-id is required")
+			}
+			if normalizedPlanType != "MONTHLY" && normalizedPlanType != "UPFRONT" {
+				return shared.UsageError(`--plan-type must be "MONTHLY" or "UPFRONT"`)
+			}
+			requestCtx, cancel := shared.ContextWithTimeout(ctx)
+			defer cancel()
+			session, err := resolveWebSessionForCommand(requestCtx, authFlags)
+			if err != nil {
+				return err
+			}
+			result, err := getWebSubscriptionAdjustedEqualizationsFn(requestCtx, newWebClientFn(session), id, normalizedPlanType)
+			if err != nil {
+				return withWebAuthHint(err, "web subscriptions pricing adjusted-equalizations view")
+			}
+			return shared.PrintOutput(result, *output.Output, *output.Pretty)
 		},
 	}
 }

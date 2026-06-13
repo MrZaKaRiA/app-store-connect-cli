@@ -16,20 +16,31 @@ type SubscriptionPlanPricesResult struct {
 	MonthlyPricePointID string `json:"monthlyPricePointId"`
 }
 
+// SubscriptionPlanPrice identifies one billing plan's price and scheduling attributes.
+type SubscriptionPlanPrice struct {
+	PlanType             string
+	PricePointID         string
+	StartDate            string
+	PreserveCurrentPrice bool
+}
+
 // CreateSubscriptionPlanPrices creates paired upfront and monthly prices through
 // the inline subscription PATCH used by App Store Connect.
 func (c *Client) CreateSubscriptionPlanPrices(ctx context.Context, subscriptionID, upfrontPricePointID, monthlyPricePointID string) (*SubscriptionPlanPricesResult, error) {
+	return c.SetSubscriptionPlanPrices(ctx, subscriptionID, []SubscriptionPlanPrice{
+		{PlanType: "UPFRONT", PricePointID: upfrontPricePointID},
+		{PlanType: "MONTHLY", PricePointID: monthlyPricePointID},
+	})
+}
+
+// SetSubscriptionPlanPrices creates or schedules paired plan prices through the inline PATCH.
+func (c *Client) SetSubscriptionPlanPrices(ctx context.Context, subscriptionID string, prices []SubscriptionPlanPrice) (*SubscriptionPlanPricesResult, error) {
 	subscriptionID = strings.TrimSpace(subscriptionID)
-	upfrontPricePointID = strings.TrimSpace(upfrontPricePointID)
-	monthlyPricePointID = strings.TrimSpace(monthlyPricePointID)
 	if subscriptionID == "" {
 		return nil, fmt.Errorf("subscription id is required")
 	}
-	if upfrontPricePointID == "" {
-		return nil, fmt.Errorf("upfront price point id is required")
-	}
-	if monthlyPricePointID == "" {
-		return nil, fmt.Errorf("monthly price point id is required")
+	if len(prices) != 2 {
+		return nil, fmt.Errorf("exactly two subscription plan prices are required")
 	}
 
 	upfrontID := "${current-upfront}"
@@ -37,20 +48,42 @@ func (c *Client) CreateSubscriptionPlanPrices(ctx context.Context, subscriptionI
 	priceRef := func(id string) map[string]string {
 		return map[string]string{"type": "subscriptionPrices", "id": id}
 	}
-	includedPrice := func(id, planType, pricePointID string) map[string]any {
+	includedPrice := func(id string, price SubscriptionPlanPrice) map[string]any {
+		attributes := map[string]any{"planType": price.PlanType}
+		if strings.TrimSpace(price.StartDate) != "" {
+			attributes["startDate"] = strings.TrimSpace(price.StartDate)
+			attributes["preserveCurrentPrice"] = price.PreserveCurrentPrice
+		}
 		return map[string]any{
 			"type":       "subscriptionPrices",
 			"id":         id,
-			"attributes": map[string]string{"planType": planType},
+			"attributes": attributes,
 			"relationships": map[string]any{
 				"subscriptionPricePoint": map[string]any{
 					"data": map[string]string{
 						"type": "subscriptionPricePoints",
-						"id":   pricePointID,
+						"id":   price.PricePointID,
 					},
 				},
 			},
 		}
+	}
+	byType := map[string]SubscriptionPlanPrice{}
+	for _, price := range prices {
+		price.PlanType = strings.ToUpper(strings.TrimSpace(price.PlanType))
+		price.PricePointID = strings.TrimSpace(price.PricePointID)
+		if price.PlanType != "UPFRONT" && price.PlanType != "MONTHLY" {
+			return nil, fmt.Errorf(`plan type must be "UPFRONT" or "MONTHLY"`)
+		}
+		if price.PricePointID == "" {
+			return nil, fmt.Errorf("%s price point id is required", strings.ToLower(price.PlanType))
+		}
+		byType[price.PlanType] = price
+	}
+	upfront, upfrontOK := byType["UPFRONT"]
+	monthly, monthlyOK := byType["MONTHLY"]
+	if !upfrontOK || !monthlyOK {
+		return nil, fmt.Errorf("both UPFRONT and MONTHLY prices are required")
 	}
 	requestBody := map[string]any{
 		"data": map[string]any{
@@ -66,8 +99,8 @@ func (c *Client) CreateSubscriptionPlanPrices(ctx context.Context, subscriptionI
 			},
 		},
 		"included": []map[string]any{
-			includedPrice(upfrontID, "UPFRONT", upfrontPricePointID),
-			includedPrice(monthlyID, "MONTHLY", monthlyPricePointID),
+			includedPrice(upfrontID, upfront),
+			includedPrice(monthlyID, monthly),
 		},
 	}
 
@@ -86,7 +119,7 @@ func (c *Client) CreateSubscriptionPlanPrices(ctx context.Context, subscriptionI
 	}
 	return &SubscriptionPlanPricesResult{
 		SubscriptionID:      subscriptionID,
-		UpfrontPricePointID: upfrontPricePointID,
-		MonthlyPricePointID: monthlyPricePointID,
+		UpfrontPricePointID: upfront.PricePointID,
+		MonthlyPricePointID: monthly.PricePointID,
 	}, nil
 }
