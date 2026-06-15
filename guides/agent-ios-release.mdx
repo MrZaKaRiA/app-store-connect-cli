@@ -5,16 +5,17 @@
 > troubleshooting guide.
 
 This page adds the agent-specific contract: resolve exact resources, use strict
-validation, preview one mutation path, and prove the final App Store Connect
+validation, preview each mutation, and prove the final App Store Connect
 state before reporting success.
 
 ## Operating rules
 
 * Run `--help` for every command before using it.
-* Resolve the app ID, version ID, and build ID before changing anything.
+* Resolve the app ID and version target before changing anything. Resolve the
+  build ID before staging or submitting.
 * Use public App Store Connect API commands before experimental web commands.
-* Preview mutations with `--dry-run`, then use `--confirm` only after checking
-  the resolved version and build.
+* Preview supported workflows with `--dry-run`. Use `--confirm` only after
+  checking every identifier available at that stage.
 * Never print credentials or personal identity values in logs or handoffs.
 * A successful mutation response is not proof that the version entered review.
 
@@ -26,7 +27,7 @@ Validate the stored credentials against App Store Connect:
 asc auth status --validate
 ```
 
-Resolve the app, version, and processed build:
+Resolve the app and release version:
 
 ```bash  theme={null}
 asc apps list --bundle-id "com.example.app" --output table
@@ -39,7 +40,12 @@ asc versions list \
   --version "$VERSION" \
   --platform IOS \
   --output json
+```
 
+For a build that is already in App Store Connect, resolve a valid processed
+build and record its ID:
+
+```bash  theme={null}
 asc builds info \
   --app "$ASC_APP_ID" \
   --latest \
@@ -47,20 +53,84 @@ asc builds info \
   --platform IOS \
   --processing-state VALID \
   --output json
+
+export ASC_BUILD_ID="BUILD_ID"
 ```
 
-Create the version only when the list result confirms it does not exist:
+Skip the build lookup when uploading a local IPA; resolve the build ID after
+upload and processing. Do not create a duplicate version. The staging and
+publishing commands below can create a missing version for their workflows.
+
+## 2. Prepare the version
+
+Choose the path that matches the current release state.
+
+### Stage an existing processed build
+
+Preview the staging plan:
 
 ```bash  theme={null}
-asc versions create \
+asc release stage \
   --app "$ASC_APP_ID" \
   --version "$VERSION" \
-  --platform IOS
+  --build "$ASC_BUILD_ID" \
+  --copy-metadata-from "1.2.2" \
+  --dry-run \
+  --output table
 ```
 
-## 2. Gate release readiness
+After checking the resolved resources and plan, run the confirmed pipeline with
+strict readiness checks. It applies metadata, attaches the build, and only then
+validates the prepared version:
 
-Use strict validation so readiness warnings return a non-zero exit code:
+```bash  theme={null}
+asc release stage \
+  --app "$ASC_APP_ID" \
+  --version "$VERSION" \
+  --build "$ASC_BUILD_ID" \
+  --copy-metadata-from "1.2.2" \
+  --strict-validate \
+  --confirm \
+  --output table
+```
+
+### Upload and attach a local IPA
+
+Preview the upload and preparation plan:
+
+```bash  theme={null}
+asc publish appstore \
+  --app "$ASC_APP_ID" \
+  --ipa "./build/ios/ipa/MyApp.ipa" \
+  --version "$VERSION" \
+  --wait \
+  --dry-run \
+  --output table
+```
+
+After checking the plan, repeat the command without `--dry-run`. Do not add
+`--submit`; strict validation must run against the build after it is attached.
+Record the build ID from the result, or resolve it after processing:
+
+```bash  theme={null}
+asc builds info \
+  --app "$ASC_APP_ID" \
+  --latest \
+  --version "$VERSION" \
+  --platform IOS \
+  --processing-state VALID \
+  --output json
+
+export ASC_BUILD_ID="BUILD_ID"
+```
+
+If the version is already prepared and has the intended build attached, skip
+preparation and continue to the readiness gate.
+
+## 3. Gate readiness and submit
+
+After the build is attached, use strict validation so readiness warnings return
+a non-zero exit code:
 
 ```bash  theme={null}
 asc validate \
@@ -78,51 +148,20 @@ asc validate iap --app "$ASC_APP_ID" --strict --output table
 asc validate subscriptions --app "$ASC_APP_ID" --strict --output table
 ```
 
-Do not continue while a required metadata, build, product, privacy, or review
-check is failing.
-
-## 3. Choose exactly one mutation path
-
-Preview the path that matches the release:
-
-### Stage an existing build without submitting
-
-```bash  theme={null}
-asc release stage \
-  --app "$ASC_APP_ID" \
-  --version "$VERSION" \
-  --build "BUILD_ID" \
-  --copy-metadata-from "1.2.2" \
-  --dry-run \
-  --output table
-```
-
-### Submit an already prepared version
+Do not submit while a required metadata, build, product, privacy, or review
+check is failing. When all applicable gates pass, preview the submission:
 
 ```bash  theme={null}
 asc review submit \
   --app "$ASC_APP_ID" \
   --version "$VERSION" \
-  --build "BUILD_ID" \
+  --build "$ASC_BUILD_ID" \
   --dry-run \
   --output table
 ```
 
-### Upload a local IPA and submit it
-
-```bash  theme={null}
-asc publish appstore \
-  --app "$ASC_APP_ID" \
-  --ipa "./build/ios/ipa/MyApp.ipa" \
-  --version "$VERSION" \
-  --wait \
-  --submit \
-  --dry-run \
-  --output table
-```
-
-After inspecting the preview, repeat that same command with `--confirm` instead
-of `--dry-run`.
+After checking the preview, repeat that command with `--confirm` instead of
+`--dry-run`.
 
 ## 4. Prove the final state
 
