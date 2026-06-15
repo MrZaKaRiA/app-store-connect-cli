@@ -154,7 +154,39 @@ asc validate \
   --output table
 ```
 
-For apps with digital goods, gate those products too:
+For apps with digital goods, inspect product readiness before using the strict
+gate:
+
+```bash  theme={null}
+asc validate iap --app "$ASC_APP_ID" --output json
+asc validate subscriptions --app "$ASC_APP_ID" --output json
+```
+
+Resolve the exact `resourceId` for every product included in this release.
+`READY_TO_SUBMIT` is an action item, not a passing state. Submit each affected
+product, then re-read its state:
+
+```bash  theme={null}
+asc iap submit \
+  --app "$ASC_APP_ID" \
+  --iap-id "IAP_ID" \
+  --confirm \
+  --output json
+
+asc subscriptions review submit \
+  --app "$ASC_APP_ID" \
+  --subscription-id "SUBSCRIPTION_ID" \
+  --confirm \
+  --output json
+```
+
+These product submission commands do not support `--dry-run`; use the
+validation report and exact resource IDs as the pre-mutation check. First-time
+subscriptions may need to be submitted with the app version in App Store
+Connect instead of through the public API. If that limitation applies, stop and
+complete or hand off the UI step with the exact subscription and version IDs.
+
+After product submission, rerun the applicable validators in strict mode:
 
 ```bash  theme={null}
 asc validate iap --app "$ASC_APP_ID" --strict --output table
