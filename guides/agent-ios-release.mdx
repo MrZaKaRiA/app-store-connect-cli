@@ -83,9 +83,13 @@ asc release stage \
   --output table
 ```
 
-After checking the resolved resources and plan, run the confirmed pipeline with
-strict readiness checks. It applies metadata, attaches the build, and only then
-validates the prepared version:
+A dry-run cannot attach the build. If its only readiness blocker is the missing
+relationship for the exact resolved build, the confirmed pipeline fixes that
+condition before its readiness step. Resolve every other blocker first.
+
+After checking the resolved resources and plan, run the confirmed preparation
+pipeline. It applies metadata and attaches the build. The final strict gate runs
+after any digital goods are submitted:
 
 ```bash  theme={null}
 asc release stage \
@@ -93,7 +97,6 @@ asc release stage \
   --version "$VERSION" \
   --build "$ASC_BUILD_ID" \
   --copy-metadata-from "1.2.2" \
-  --strict-validate \
   --confirm \
   --output table
 ```
@@ -142,20 +145,8 @@ preparation and continue to the readiness gate.
 
 ## 3. Gate readiness and submit
 
-After the build is attached, use strict validation so readiness warnings return
-a non-zero exit code:
-
-```bash  theme={null}
-asc validate \
-  --app "$ASC_APP_ID" \
-  --version "$VERSION" \
-  --platform IOS \
-  --strict \
-  --output table
-```
-
-For apps with digital goods, inspect product readiness before using the strict
-gate:
+After the build is attached, apps with digital goods must inspect and submit
+their products before using any strict readiness gate:
 
 ```bash  theme={null}
 asc validate iap --app "$ASC_APP_ID" --output json
@@ -191,6 +182,17 @@ After product submission, rerun the applicable validators in strict mode:
 ```bash  theme={null}
 asc validate iap --app "$ASC_APP_ID" --strict --output table
 asc validate subscriptions --app "$ASC_APP_ID" --strict --output table
+```
+
+Then run the unified strict app-version gate:
+
+```bash  theme={null}
+asc validate \
+  --app "$ASC_APP_ID" \
+  --version "$VERSION" \
+  --platform IOS \
+  --strict \
+  --output table
 ```
 
 Do not submit while a required metadata, build, product, privacy, or review
