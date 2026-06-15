@@ -4,7 +4,7 @@
 > [App Store Submission](/guides/app-store-submission) for the full workflow and
 > troubleshooting guide.
 
-This page adds the agent-specific contract: resolve exact resources, use strict
+This page adds the agent-specific contract: resolve exact resources, use scoped
 validation, preview each mutation, and prove the final App Store Connect
 state before reporting success.
 
@@ -96,7 +96,7 @@ relationship for the exact resolved build, the confirmed pipeline fixes that
 condition before its readiness step. Resolve every other blocker first.
 
 After checking the resolved resources and plan, run the confirmed preparation
-pipeline. It applies metadata and attaches the build. The final strict gate runs
+pipeline. It applies metadata and attaches the build. The final release gate runs
 after any digital goods are submitted:
 
 ```bash  theme={null}
@@ -135,7 +135,7 @@ asc publish appstore \
   --output json
 ```
 
-Do not add `--submit`; strict validation must run against the build after it is
+Do not add `--submit`; release validation must run against the build after it is
 attached. Set `ASC_BUILD_ID` to the exact `buildId` returned by this command and
 retain its `buildNumber`:
 
@@ -154,7 +154,7 @@ preparation and continue to the readiness gate.
 ## 3. Gate readiness and submit
 
 After the build is attached, apps with digital goods must inspect and submit
-their products before using any strict readiness gate:
+their products before using the final readiness gate:
 
 ```bash  theme={null}
 asc validate iap --app "$ASC_APP_ID" --output json
@@ -185,23 +185,33 @@ subscriptions may need to be submitted with the app version in App Store
 Connect instead of through the public API. If that limitation applies, stop and
 complete or hand off the UI step with the exact subscription and version IDs.
 
-After product submission, rerun the applicable validators in strict mode:
+After product submission, rerun the applicable validators:
 
 ```bash  theme={null}
-asc validate iap --app "$ASC_APP_ID" --strict --output table
-asc validate subscriptions --app "$ASC_APP_ID" --strict --output table
+asc validate iap --app "$ASC_APP_ID" --output json
+asc validate subscriptions --app "$ASC_APP_ID" --output json
 ```
 
-Then run the unified strict app-version gate:
+For every selected product ID, require the review-readiness warning to disappear
+and verify a state such as `WAITING_FOR_REVIEW`, `IN_REVIEW`,
+`PENDING_BINARY_APPROVAL`, or `APPROVED`. These validators cover the full product
+catalog and do not accept a product filter. Do not add `--strict` as an app
+release gate when unrelated draft or legacy products exist.
+
+Then run the unified app-version validation:
 
 ```bash  theme={null}
 asc validate \
   --app "$ASC_APP_ID" \
   --version "$VERSION" \
   --platform IOS \
-  --strict \
-  --output table
+  --output json
 ```
+
+Require `summary.blocking` to be `0`, and resolve every warning that applies to
+the target version, build, or selected products. Non-strict output keeps
+unrelated product warnings advisory; it does not make them safe to ignore when
+their resource IDs are part of this release.
 
 Do not submit while a required metadata, build, product, privacy, or review
 check is failing. When all applicable gates pass, preview the submission:
