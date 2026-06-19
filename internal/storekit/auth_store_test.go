@@ -190,6 +190,50 @@ func TestGetCredentialsPrefersGlobalConfigOverSameNamedKeychainProfile(t *testin
 	}
 }
 
+func TestGetCredentialsPreservesInvalidFallbackConfigError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ASC_CONFIG_PATH", "")
+	t.Setenv("ASC_STOREKIT_BYPASS_KEYCHAIN", "0")
+	globalPath, err := config.GlobalPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll(global) error = %v", err)
+	}
+	if err := os.WriteFile(globalPath, []byte("{invalid-json"), 0o600); err != nil {
+		t.Fatalf("WriteFile(global) error = %v", err)
+	}
+
+	payload, err := json.Marshal(credentialPayload{
+		KeyID: "OTHER_KEY", IssuerID: "OTHER_ISSUER", PrivateKeyPEM: "keychain-pem", BundleID: "com.keychain.app",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := openStoreKitKeyring
+	openStoreKitKeyring = func() (keyring.Keyring, error) {
+		return keyring.NewArrayKeyring([]keyring.Item{{Key: storeKitKeyringItemPrefix + "other", Data: payload}}), nil
+	}
+	t.Cleanup(func() { openStoreKitKeyring = original })
+
+	projectDir := t.TempDir()
+	localPath := filepath.Join(projectDir, ".asc", "config.json")
+	if err := config.SaveAt(localPath, &config.Config{AppID: "local-app"}); err != nil {
+		t.Fatalf("SaveAt(local) error = %v", err)
+	}
+	t.Chdir(projectDir)
+
+	_, _, err = GetCredentialsWithSource("wanted")
+	if err == nil || !strings.Contains(err.Error(), "failed to parse config") {
+		t.Fatalf("GetCredentialsWithSource(wanted) error = %v", err)
+	}
+	if strings.Contains(err.Error(), "credentials not found") {
+		t.Fatalf("GetCredentialsWithSource(wanted) dropped config error: %v", err)
+	}
+}
+
 func TestSetDefaultCredentialsUpdatesGlobalCredentialSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

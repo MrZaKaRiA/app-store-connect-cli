@@ -131,8 +131,12 @@ func GetCredentialsWithSource(profile string) (Credentials, string, error) {
 				return selected.Credentials, "keychain", nil
 			}
 			if strings.TrimSpace(profile) != "" {
-				if configCredential, configErr := getCredentialFromConfig(profile); configErr == nil {
+				configCredential, configErr := getCredentialFromConfig(profile)
+				if configErr == nil {
 					return configCredential.Credentials, "config", nil
+				}
+				if !errors.Is(configErr, config.ErrNotFound) {
+					return Credentials{}, "", configErr
 				}
 				return Credentials{}, "", fmt.Errorf("StoreKit credentials not found for profile %q", profile)
 			}
