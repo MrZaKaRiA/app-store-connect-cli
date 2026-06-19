@@ -61,12 +61,8 @@ func resolveCredentialsWithSource(flags commonFlags) (storekitapi.Credentials, s
 		profileSource = "ASC_STOREKIT_PROFILE"
 	}
 	strict := parseBoolEnv("ASC_STOREKIT_STRICT_AUTH")
-	environmentCredentials, environmentSet, err := credentialsFromEnvironment()
-	if err != nil {
-		return storekitapi.Credentials{}, "", err
-	}
 	if profile != "" {
-		if strict && environmentSet {
+		if strict && hasEnvironmentKeyCredentials() {
 			return storekitapi.Credentials{}, "", fmt.Errorf("mixed StoreKit authentication sources detected: profile and ASC_STOREKIT_* key credentials")
 		}
 		credentials, _, err := storekitapi.GetCredentialsWithSource(profile)
@@ -78,6 +74,10 @@ func resolveCredentialsWithSource(flags commonFlags) (storekitapi.Credentials, s
 			return storekitapi.Credentials{}, "", fmt.Errorf("--bundle-id is required (or set ASC_STOREKIT_BUNDLE_ID or store it in the StoreKit profile)")
 		}
 		return credentials, profileSource, nil
+	}
+	environmentCredentials, environmentSet, err := credentialsFromEnvironment()
+	if err != nil {
+		return storekitapi.Credentials{}, "", err
 	}
 	if environmentSet {
 		environmentCredentials.BundleID = resolveBundleID(flags.BundleID, environmentCredentials.BundleID)
@@ -121,6 +121,21 @@ func credentialsFromEnvironment() (storekitapi.Credentials, bool, error) {
 		return storekitapi.Credentials{}, false, fmt.Errorf("incomplete StoreKit environment credentials: set ASC_STOREKIT_KEY_ID, ASC_STOREKIT_ISSUER_ID, and one of ASC_STOREKIT_PRIVATE_KEY_PATH, ASC_STOREKIT_PRIVATE_KEY, or ASC_STOREKIT_PRIVATE_KEY_B64")
 	}
 	return credentials, complete, nil
+}
+
+func hasEnvironmentKeyCredentials() bool {
+	for _, name := range []string{
+		"ASC_STOREKIT_KEY_ID",
+		"ASC_STOREKIT_ISSUER_ID",
+		"ASC_STOREKIT_PRIVATE_KEY_PATH",
+		"ASC_STOREKIT_PRIVATE_KEY",
+		"ASC_STOREKIT_PRIVATE_KEY_B64",
+	} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveBundleID(flagValue *string, stored string) string {

@@ -131,6 +131,65 @@ func TestGetCredentialsFallsBackToGlobalWhenLocalConfigHasNoStoreKitKeys(t *test
 	}
 }
 
+func TestGetCredentialsPrefersGlobalConfigOverSameNamedKeychainProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ASC_CONFIG_PATH", "")
+	t.Setenv("ASC_STOREKIT_BYPASS_KEYCHAIN", "0")
+	globalPath, err := config.GlobalPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	configCredentials := testCredentials(t)
+	configCredentials.KeyID = "GLOBAL_CONFIG_KEY"
+	configCredentials.PrivateKeyPath = "/global/SubscriptionKey.p8"
+	configCredentials.PrivateKeyPEM = ""
+	if err := StoreCredentialsConfigAt("shared", configCredentials, globalPath); err != nil {
+		t.Fatalf("StoreCredentialsConfigAt(global) error = %v", err)
+	}
+
+	payload, err := json.Marshal(credentialPayload{
+		KeyID: "KEYCHAIN_KEY", IssuerID: "KEYCHAIN_ISSUER", PrivateKeyPEM: "keychain-pem", BundleID: "com.keychain.app",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := openStoreKitKeyring
+	openStoreKitKeyring = func() (keyring.Keyring, error) {
+		return keyring.NewArrayKeyring([]keyring.Item{{Key: storeKitKeyringItemPrefix + "shared", Data: payload}}), nil
+	}
+	t.Cleanup(func() { openStoreKitKeyring = original })
+
+	projectDir := t.TempDir()
+	localPath := filepath.Join(projectDir, ".asc", "config.json")
+	if err := config.SaveAt(localPath, &config.Config{AppID: "local-app"}); err != nil {
+		t.Fatalf("SaveAt(local) error = %v", err)
+	}
+	t.Chdir(projectDir)
+
+	resolved, source, err := GetCredentialsWithSource("shared")
+	if err != nil {
+		t.Fatalf("GetCredentialsWithSource(shared) error = %v", err)
+	}
+	if source != "config" || resolved.KeyID != "GLOBAL_CONFIG_KEY" {
+		t.Fatalf("credentials = %#v source=%q", resolved, source)
+	}
+	defaultCredentials, defaultSource, err := GetCredentialsWithSource("")
+	if err != nil {
+		t.Fatalf("GetCredentialsWithSource(default) error = %v", err)
+	}
+	if defaultSource != "config" || defaultCredentials.KeyID != "GLOBAL_CONFIG_KEY" {
+		t.Fatalf("default credentials = %#v source=%q", defaultCredentials, defaultSource)
+	}
+	listed, err := ListCredentials()
+	if err != nil {
+		t.Fatalf("ListCredentials() error = %v", err)
+	}
+	if len(listed) != 1 || listed[0].Source != source || listed[0].KeyID != resolved.KeyID {
+		t.Fatalf("ListCredentials() = %#v, resolved = %#v source=%q", listed, resolved, source)
+	}
+}
+
 func TestSetDefaultCredentialsUpdatesGlobalCredentialSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
