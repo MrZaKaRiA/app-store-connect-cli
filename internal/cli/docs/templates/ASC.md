@@ -221,7 +221,8 @@ Use `asc <command> --help` for subcommands and flags.
 - `ASC_DEBUG` - Debug output (`api` enables HTTP logs)
 - `ASC_STOREKIT_KEY_ID`, `ASC_STOREKIT_ISSUER_ID`, `ASC_STOREKIT_PRIVATE_KEY_PATH` - StoreKit In-App Purchase API authentication
 - `ASC_STOREKIT_PRIVATE_KEY`, `ASC_STOREKIT_PRIVATE_KEY_B64` - Inline StoreKit private key alternatives
-- `ASC_STOREKIT_BUNDLE_ID`, `ASC_STOREKIT_ENVIRONMENT`, `ASC_STOREKIT_PROFILE` - StoreKit app, environment, and profile selection
+- `ASC_STOREKIT_BUNDLE_ID`, `ASC_STOREKIT_ENVIRONMENT`, `ASC_STOREKIT_PROFILE`, `ASC_STOREKIT_STRICT_AUTH` - StoreKit app, environment, profile, and mixed-source auth behavior
+- `ASC_STOREKIT_BYPASS_KEYCHAIN` - Disable StoreKit keychain usage and use config-backed storage
 - Web password environment variable (`ASC_WEB` + `_PASSWORD`) - Password source for `asc web auth login` and `asc web apps create`
 - `ASC_WEB_SESSION_CACHE`, `ASC_WEB_SESSION_CACHE_DIR`, `ASC_WEB_SESSION_CACHE_BACKEND` - Web-session cache controls for unofficial web flows
 - `ASC_IRIS_SESSION_CACHE`, `ASC_IRIS_SESSION_CACHE_DIR` - Deprecated legacy app-create cache settings; imported into the web session cache during the transition window

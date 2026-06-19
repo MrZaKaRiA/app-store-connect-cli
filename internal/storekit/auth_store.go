@@ -167,7 +167,7 @@ func ListCredentials() ([]StoredCredential, error) {
 	if keychainErr != nil || ShouldBypassKeychain() {
 		return normalizeDefaults(configCredentials), nil
 	}
-	return normalizeDefaults(mergeCredentials(keychainCredentials, configCredentials)), nil
+	return normalizeDefaults(mergeCredentials(configCredentials, keychainCredentials)), nil
 }
 
 func SetDefaultCredentials(name string) error {

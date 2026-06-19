@@ -190,6 +190,9 @@ func ValidateMessage(message Message) error {
 	if message.HeaderPosition != "" && message.HeaderPosition != HeaderAboveBody && message.HeaderPosition != HeaderAboveImage {
 		return fmt.Errorf("header position must be one of: ABOVE_BODY, ABOVE_IMAGE")
 	}
+	if message.HeaderPosition == HeaderAboveImage && message.Image == nil {
+		return fmt.Errorf("header position ABOVE_IMAGE requires an image")
+	}
 	if message.Image != nil {
 		if err := validateUUID("image identifier", message.Image.ImageIdentifier); err != nil {
 			return err
@@ -200,6 +203,9 @@ func ValidateMessage(message Message) error {
 		if utf8.RuneCountInString(message.Image.AltText) > 150 {
 			return fmt.Errorf("image alt text must be at most 150 characters")
 		}
+	}
+	if len(message.BulletPoints) > 5 {
+		return fmt.Errorf("message must contain at most 5 bullet points")
 	}
 	for i, bullet := range message.BulletPoints {
 		if strings.TrimSpace(bullet.Text) == "" {

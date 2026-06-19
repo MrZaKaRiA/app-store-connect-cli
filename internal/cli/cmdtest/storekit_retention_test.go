@@ -153,9 +153,9 @@ func TestStoreKitAuthLoginStoresDedicatedProfile(t *testing.T) {
 	root.FlagSet.SetOutput(io.Discard)
 	stdout, stderr := captureOutput(t, func() {
 		if err := root.Parse([]string{
-			"storekit", "auth", "login", "--name", "Retention",
-			"--key-id", "STOREKIT_KEY", "--issuer-id", "STOREKIT_ISSUER",
-			"--private-key", keyPath, "--bundle-id", "com.example.app",
+			"storekit", "auth", "login", "--name", " Retention ",
+			"--key-id", " STOREKIT_KEY ", "--issuer-id", " STOREKIT_ISSUER ",
+			"--private-key", " " + keyPath + " ", "--bundle-id", " com.example.app ",
 			"--bypass-keychain",
 		}); err != nil {
 			t.Fatalf("parse error: %v", err)

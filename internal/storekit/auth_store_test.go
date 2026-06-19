@@ -90,6 +90,13 @@ func TestGetCredentialsPrefersActiveConfigOverSameNamedKeychainProfile(t *testin
 	if source != "config" || credentials.KeyID != "CONFIG_KEY" {
 		t.Fatalf("credentials = %#v source=%q", credentials, source)
 	}
+	listed, err := ListCredentials()
+	if err != nil {
+		t.Fatalf("ListCredentials() error = %v", err)
+	}
+	if len(listed) != 1 || listed[0].Source != "config" || listed[0].KeyID != "CONFIG_KEY" {
+		t.Fatalf("ListCredentials() = %#v", listed)
+	}
 }
 
 func TestGetCredentialsFallsBackToGlobalWhenLocalConfigHasNoStoreKitKeys(t *testing.T) {

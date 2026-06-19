@@ -71,12 +71,17 @@ Examples:
 			if err := rejectUnexpectedArgs(args); err != nil {
 				return err
 			}
+			cleanName := strings.TrimSpace(*name)
+			cleanKeyID := strings.TrimSpace(*keyID)
+			cleanIssuerID := strings.TrimSpace(*issuerID)
+			cleanPrivateKey := strings.TrimSpace(*privateKey)
+			cleanBundleID := strings.TrimSpace(*bundleID)
 			required := []struct{ value, name string }{
-				{*name, "--name"},
-				{*keyID, "--key-id"},
-				{*issuerID, "--issuer-id"},
-				{*privateKey, "--private-key"},
-				{*bundleID, "--bundle-id"},
+				{cleanName, "--name"},
+				{cleanKeyID, "--key-id"},
+				{cleanIssuerID, "--issuer-id"},
+				{cleanPrivateKey, "--private-key"},
+				{cleanBundleID, "--bundle-id"},
 			}
 			for _, item := range required {
 				if strings.TrimSpace(item.value) == "" {
@@ -93,12 +98,12 @@ Examples:
 				return shared.UsageError("--local requires --bypass-keychain or ASC_STOREKIT_BYPASS_KEYCHAIN")
 			}
 			if !*skipValidation {
-				if err := authsvc.ValidateKeyFile(*privateKey); err != nil {
+				if err := authsvc.ValidateKeyFile(cleanPrivateKey); err != nil {
 					return fmt.Errorf("storekit auth login: invalid private key: %w", err)
 				}
 			}
 			credentials := storekitapi.Credentials{
-				KeyID: *keyID, IssuerID: *issuerID, PrivateKeyPath: *privateKey, BundleID: *bundleID,
+				KeyID: cleanKeyID, IssuerID: cleanIssuerID, PrivateKeyPath: cleanPrivateKey, BundleID: cleanBundleID,
 			}
 			if !*skipValidation {
 				localClient, err := storekitapi.NewClient(credentials, storekitapi.Sandbox)
@@ -130,16 +135,16 @@ Examples:
 					if err != nil {
 						return fmt.Errorf("storekit auth login: %w", err)
 					}
-					if err := storekitapi.StoreCredentialsConfigAt(*name, credentials, path); err != nil {
+					if err := storekitapi.StoreCredentialsConfigAt(cleanName, credentials, path); err != nil {
 						return fmt.Errorf("storekit auth login: store credentials: %w", err)
 					}
-				} else if err := storekitapi.StoreCredentialsConfig(*name, credentials); err != nil {
+				} else if err := storekitapi.StoreCredentialsConfig(cleanName, credentials); err != nil {
 					return fmt.Errorf("storekit auth login: store credentials: %w", err)
 				}
-			} else if err := storekitapi.StoreCredentials(*name, credentials); err != nil {
+			} else if err := storekitapi.StoreCredentials(cleanName, credentials); err != nil {
 				return fmt.Errorf("storekit auth login: store credentials: %w", err)
 			}
-			fmt.Printf("Successfully registered StoreKit API key %q for %s\n", strings.TrimSpace(*name), strings.TrimSpace(*bundleID))
+			fmt.Printf("Successfully registered StoreKit API key %q for %s\n", cleanName, cleanBundleID)
 			return nil
 		},
 	}
@@ -258,13 +263,14 @@ func authSwitchCommand() *ffcli.Command {
 			if err := rejectUnexpectedArgs(args); err != nil {
 				return err
 			}
-			if strings.TrimSpace(*name) == "" {
+			cleanName := strings.TrimSpace(*name)
+			if cleanName == "" {
 				return shared.UsageError("--name is required")
 			}
-			if err := storekitapi.SetDefaultCredentials(*name); err != nil {
+			if err := storekitapi.SetDefaultCredentials(cleanName); err != nil {
 				return fmt.Errorf("storekit auth switch: %w", err)
 			}
-			fmt.Printf("Default StoreKit profile set to %q\n", strings.TrimSpace(*name))
+			fmt.Printf("Default StoreKit profile set to %q\n", cleanName)
 			return nil
 		},
 	}
@@ -327,7 +333,8 @@ func authLogoutCommand() *ffcli.Command {
 			if !*confirm {
 				return shared.UsageError("--confirm is required")
 			}
-			if *all == (strings.TrimSpace(*name) != "") {
+			cleanName := strings.TrimSpace(*name)
+			if *all == (cleanName != "") {
 				return shared.UsageError("exactly one of --name or --all is required")
 			}
 			if *all {
@@ -337,13 +344,13 @@ func authLogoutCommand() *ffcli.Command {
 				fmt.Println("Removed all StoreKit credentials")
 				return nil
 			}
-			if err := storekitapi.RemoveCredentials(*name); err != nil {
+			if err := storekitapi.RemoveCredentials(cleanName); err != nil {
 				if errors.Is(err, keyring.ErrKeyNotFound) {
-					return fmt.Errorf("storekit auth logout: credentials not found for profile %q", strings.TrimSpace(*name))
+					return fmt.Errorf("storekit auth logout: credentials not found for profile %q", cleanName)
 				}
 				return fmt.Errorf("storekit auth logout: %w", err)
 			}
-			fmt.Printf("Removed StoreKit profile %q\n", strings.TrimSpace(*name))
+			fmt.Printf("Removed StoreKit profile %q\n", cleanName)
 			return nil
 		},
 	}

@@ -244,10 +244,21 @@ func TestValidateMessageRequiresImageAccessibilityText(t *testing.T) {
 	if err := ValidateMessage(message); err == nil || !strings.Contains(err.Error(), "bullet point 1 alt text is required") {
 		t.Fatalf("ValidateMessage() error = %v", err)
 	}
+	message.BulletPoints = nil
+	message.HeaderPosition = HeaderAboveImage
+	if err := ValidateMessage(message); err == nil || !strings.Contains(err.Error(), "ABOVE_IMAGE requires an image") {
+		t.Fatalf("ValidateMessage() error = %v", err)
+	}
+	message.HeaderPosition = ""
+	message.BulletPoints = make([]MessageBulletPoint, 6)
+	if err := ValidateMessage(message); err == nil || !strings.Contains(err.Error(), "at most 5 bullet points") {
+		t.Fatalf("ValidateMessage() error = %v", err)
+	}
 }
 
 func testCredentials(t *testing.T) Credentials {
 	t.Helper()
+	t.Setenv("ASC_BYPASS_KEYCHAIN", "1")
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKey() error = %v", err)
